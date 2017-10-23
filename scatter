@@ -1,0 +1,5 @@
+#!/bin/bash
+pwd=$(pwd)
+cd /Users/michaelzevin/research/binary_interactions/main_files/
+./main_Nbody_AffineTides_solver.exe <${pwd}/$1
+mv Nbody* ${pwd}

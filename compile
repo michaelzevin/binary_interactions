@@ -1,0 +1,3 @@
+#!/bin/bash
+cd /Users/michaelzevin/research/binary_interactions/main_files
+gfortran module_Nbody_AffineTides_solver.f90 main_Nbody_AffineTides_solver.f90 -o main_Nbody_AffineTides_solver.exe libs_odepackdp.so gslwr.o -lgsl -lgslcblas -L/opt/local/lib -llapack
