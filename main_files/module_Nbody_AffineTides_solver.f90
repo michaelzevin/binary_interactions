@@ -10,7 +10,7 @@ real*8, dimension(:), allocatable					:: gas_gamma, Mqp_sph
 integer, dimension(:), allocatable					:: evoTides_yesno, RigidSph_yesno
 real*8, dimension(3,3)								:: I_MAT
 real*8												:: PN_gamma = 2.12370597232e-06	!postnewtonian gamma - units: Rsun, Msun, ....
-integer												:: use_12PN, use_25PN, Identify_NBody_endstate, max_sim_nrsteps
+integer												:: use_12PN, use_1PN, use_2PN, use_25PN, Identify_3Body_endstate, max_sim_nrsteps
 integer												:: outputinfo_screenfiles
 real*8												:: scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold
 real*8												:: max_simtime_sec, IMSbinsingle_threshold, tidaldisrup_threshold, insp_threshold
@@ -68,6 +68,41 @@ CONTAINS
 	!----------------------------------------------------------------------------------------------------
 
 
+
+	!----------------------------------------------------------------------------------------------------
+	FUNCTION CoM_2body(vec_1, mass_1, vec_2, mass_2)
+	!----------------------------------------------------------------------------------------------------
+		IMPLICIT NONE
+		real*8, dimension(3), intent(in)	:: vec_1, vec_2
+		real*8, intent(in)	                :: mass_1, mass_2
+		real*8, dimension(3)				:: CoM_2body
+		!---------------------------------------
+		!calc center of mass
+        CoM_2body = (mass_1*vec_1 + mass_2*vec_2)/(mass_1 + mass_2)
+		!---------------------------------------	
+	RETURN
+	end function CoM_2body
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
+
+	
+	!----------------------------------------------------------------------------------------------------
+	FUNCTION CoM_3body(vec_1, mass_1, vec_2, mass_2, vec_3, mass_3)
+	!----------------------------------------------------------------------------------------------------
+		IMPLICIT NONE
+		real*8, dimension(3), intent(in)	:: vec_1, vec_2, vec_3
+		real*8, intent(in)	                :: mass_1, mass_2, mass_3
+		real*8, dimension(3)				:: CoM_3body
+		!---------------------------------------
+		!calc center of mass
+        CoM_3body = (mass_1*vec_1 + mass_2*vec_2 + mass_3*vec_3)/(mass_1 + mass_2 + mass_3)
+		!---------------------------------------	
+	RETURN
+	end function CoM_3body
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
+
+
 	!----------------------------------------------------------------------------------------------------
 	FUNCTION func_det_3x3M(M)
 	!----------------------------------------------------------------------------------------------------
@@ -100,7 +135,49 @@ CONTAINS
 	end function Trace_3x3M
 	!----------------------------------------------------------------------------------------------------
 	!----------------------------------------------------------------------------------------------------
-	
+
+
+	!----------------------------------------------------------------------------------------------------
+	FUNCTION Nbody_dt(Y)	!calc optimal (adaptive) time step
+	!----------------------------------------------------------------------------------------------------	
+		IMPLICIT NONE
+		real*8, dimension(tot_nr_Y_evol_eqs), intent(in)	:: Y
+		real*8												:: Nbody_dt
+		real*8, dimension(n_particles,length_Y_per_body_n)	:: Y_in_body_all_all
+		real*8, dimension(n_particles,3)					:: pos, vel
+		real*8, dimension(n_particles,n_particles)			:: r_ij, v_ij, a_ij
+		real*8												:: min_deltaT_rov, min_deltaT_roa, min_deltaT	
+		!---------------------------------------
+		!UNPACK:
+		Y_in_body_all_all(:,:) 		= RESHAPE(Y, (/ n_particles,length_Y_per_body_n /), ORDER = (/2,1/))
+		pos(:,:)					= Y_in_body_all_all(:,1:3)
+		vel(:,:)					= Y_in_body_all_all(:,4:6)
+		!initilize:
+		r_ij(:,:) = 1e10	!=high number to make use MIN(r/..) is not i,i.
+		v_ij(:,:) = 1e-10	!=1 to avoid divergence at i,i when calc dt.
+		a_ij(:,:) = 1e-10 !=1 to avoid divergence at i,i when calc dt.
+		!i,j loop:
+		do i=1, n_particles,1
+		do j=1, n_particles,1
+		if (i .NE. j) then
+			!rel pos, vel, acc between i,j.
+			r_ij(i,j) 	= len3vec(pos(i,:)-pos(j,:))						!dist between i,j
+			v_ij(i,j) 	= len3vec(vel(i,:)-vel(j,:))						!vel betweeen i,j
+			a_ij(i,j)	= mass(j)/(r_ij(i,j)**2)							!acc of i caused by j.
+		endif
+		enddo
+		enddo
+		!min delta_t for NBsystem:
+		min_deltaT_rov	= (MINVAL(r_ij(:,:)/v_ij(:,:)))				!(r/v)		units: time
+		min_deltaT_roa	= (MINVAL(r_ij(:,:)/a_ij(:,:)))**(1./2.)	!sqrt(r/a)	units: time
+		min_deltaT		= (MINVAL([min_deltaT_rov, min_deltaT_roa]))
+		!return:
+		Nbody_dt = min_deltaT
+		!---------------------------------------	
+	end function Nbody_dt
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
+
 	
 	!----------------------------------------------------------------------------------------------------
 	SUBROUTINE Calc_Aint_MAT_selfgrav(S_in, Aint_out)
@@ -166,6 +243,31 @@ CONTAINS
 
 
 	!----------------------------------------------------------------------------------------------------
+	SUBROUTINE Calc_binary_L(pos_1, vel_1, mass_1, pos_2, vel_2, mass_2, Lvec)
+	!----------------------------------------------------------------------------------------------------
+		IMPLICIT NONE
+		!in, out:
+		real*8, dimension(3), 	intent(in)	:: pos_1, vel_1
+		real*8, dimension(3), 	intent(in)	:: pos_2, vel_2
+		real*8, 				intent(in)	:: mass_1, mass_2
+		real*8, dimension(3),	intent(out)	:: Lvec
+		!params in subroutine:
+		real*8								:: Mtot, mred
+		real*8, dimension(3)				:: pos, vel
+		!---------------------------------------
+		!define/calc:
+		pos			= pos_1 - pos_2
+		vel			= vel_1 - vel_2 		
+		Mtot		= mass_1+mass_2
+		mred		= mass_1*mass_2/Mtot
+        Lvec        = mred*cross(pos,vel)
+		!---------------------------------------	
+	END SUBROUTINE Calc_binary_L
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
+
+
+	!----------------------------------------------------------------------------------------------------
 	SUBROUTINE Calc_binary_info(pos_1, vel_1, mass_1, pos_2, vel_2, mass_2, out_binary_info_arr)
 	!----------------------------------------------------------------------------------------------------
 		IMPLICIT NONE
@@ -185,9 +287,9 @@ CONTAINS
 		vel			= vel_1 - vel_2 		
 		Mtot		= mass_1+mass_2
 		mred		= mass_1*mass_2/Mtot
-!		Lvec		= mred*([	pos(2)*vel(3)-pos(3)*vel(2), &
-!								pos(3)*vel(1)-pos(1)*vel(3), &
-!								pos(1)*vel(2)-pos(2)*vel(1)])						
+		!Lvec		= mred*([	pos(2)*vel(3)-pos(3)*vel(2), &
+		!						pos(3)*vel(1)-pos(1)*vel(3), &
+		!						pos(1)*vel(2)-pos(2)*vel(1)])						
         Lvec        = mred*cross(pos,vel)
 		len_L		= len3vec(Lvec)			
 		len_r 		= len3vec(pos)
@@ -206,46 +308,6 @@ CONTAINS
 	!----------------------------------------------------------------------------------------------------
 
 
-	!----------------------------------------------------------------------------------------------------
-	FUNCTION Nbody_dt(Y)	!calc optimal (adaptive) time step
-	!----------------------------------------------------------------------------------------------------	
-		IMPLICIT NONE
-		real*8, dimension(tot_nr_Y_evol_eqs), intent(in)	:: Y
-		real*8												:: Nbody_dt
-		real*8, dimension(n_particles,length_Y_per_body_n)	:: Y_in_body_all_all
-		real*8, dimension(n_particles,3)					:: pos, vel
-		real*8, dimension(n_particles,n_particles)			:: r_ij, v_ij, a_ij
-		real*8												:: min_deltaT_rov, min_deltaT_roa, min_deltaT	
-		!---------------------------------------
-		!UNPACK:
-		Y_in_body_all_all(:,:) 		= RESHAPE(Y, (/ n_particles,length_Y_per_body_n /), ORDER = (/2,1/))
-		pos(:,:)					= Y_in_body_all_all(:,1:3)
-		vel(:,:)					= Y_in_body_all_all(:,4:6)
-		!initilize:
-		r_ij(:,:) = 1e10	!=high number to make use MIN(r/..) is not i,i.
-		v_ij(:,:) = 1e-10	!=1 to avoid divergence at i,i when calc dt.
-		a_ij(:,:) = 1e-10 !=1 to avoid divergence at i,i when calc dt.
-		!i,j loop:
-		do i=1, n_particles,1
-		do j=1, n_particles,1
-		if (i .NE. j) then
-			!rel pos, vel, acc between i,j.
-			r_ij(i,j) 	= len3vec(pos(i,:)-pos(j,:))						!dist between i,j
-			v_ij(i,j) 	= len3vec(vel(i,:)-vel(j,:))						!vel betweeen i,j
-			a_ij(i,j)	= mass(j)/(r_ij(i,j)**2)							!acc of i caused by j.
-		endif
-		enddo
-		enddo
-		!min delta_t for NBsystem:
-		min_deltaT_rov	= (MINVAL(r_ij(:,:)/v_ij(:,:)))				!(r/v)		units: time
-		min_deltaT_roa	= (MINVAL(r_ij(:,:)/a_ij(:,:)))**(1./2.)	!sqrt(r/a)	units: time
-		min_deltaT		= (MINVAL([min_deltaT_rov, min_deltaT_roa]))
-		!return:
-		Nbody_dt = min_deltaT
-		!---------------------------------------	
-	end function Nbody_dt
-	!----------------------------------------------------------------------------------------------------
-	!----------------------------------------------------------------------------------------------------
 	
 
 	!----------------------------------------------------------------------------------------------------
@@ -728,15 +790,16 @@ CONTAINS
 	
 	
 	!----------------------------------------------------------------------------------------------------
-	SUBROUTINE  Nbody_coll_tidaldisrup_sub(Y, Return_Nbody_coll_tidaldisrup, Return_Nbody_coll_binparams)
+	SUBROUTINE  Nbody_endstate_sub(Y, Return_Nbody_endstate, Return_endstate_binparams)
 	!----------------------------------------------------------------------------------------------------
 		IMPLICIT NONE
 		real*8, dimension(tot_nr_Y_evol_eqs),	intent(in)		:: Y
-		integer, dimension(3),					intent(out)		:: Return_Nbody_coll_tidaldisrup
-		real*8, dimension(4)                            		:: Return_Nbody_coll_binparams
+		integer, dimension(3),					intent(out)		:: Return_Nbody_endstate
+		real*8, dimension(4),                   intent(out) 	:: Return_endstate_binparams
 		real*8, dimension(n_particles,length_Y_per_body_n)		:: body_all_all
 		real*8, dimension(n_particles,3)						:: pos, vel
 		real*8, dimension(n_particles,3,3)						:: body_all_q
+        real*8, dimension(5)                                    :: binary_info_arr_ij
 		integer													:: end_state_flag
 		integer													:: out_end_state_flag, out_bin_i, out_bin_j
 		real*8													:: r_ij, radius_tot_ij, r_12, r_kl
@@ -747,9 +810,10 @@ CONTAINS
         real*8                                                  :: KE1, KE2, M1, M2, v_dir1, v_dir2
 		real*8, dimension(3)									:: r_CM, v_CM, CM, CM_num, vCM_num
 		real*8, dimension(3)									:: CM1, CM2, vCM1, vCM2
+		real*8, dimension(3)									:: CM_pos, CM_vel, Lin_vec, Lout_vec
         real*8                                                  :: fi, fj, fk, fl
         real*8                                                  :: mass_bin_i, mass_bin_j
-        real*8                                                  :: sma, ecc
+        real*8                                                  :: a_bin, e_bin, E_kin, E_pot, E_tot, theta
         integer                                                 :: unbound, ub1, ub2
 		
 		!------------------------------------------------------------
@@ -763,11 +827,10 @@ CONTAINS
 		!Initialize:
 		!------------------------------------------------------------
 		end_state_flag		= 0
-		out_end_state_flag	= 0
 		out_bin_i 			= 0
 		out_bin_j 			= 0	
 		!------------------------------------------------------------
-		!Check for collisions:
+		!Check for collisions (endstate = 2)
 		!------------------------------------------------------------
 		!---------------------------------------
 		!loop over obj pairs:
@@ -784,16 +847,22 @@ CONTAINS
 			!-----------------------------------
 			!COLLISION:
 			!-----------------------------------
-			if (r_ij .LT. radius_tot_ij)					end_state_flag = 2	!COLLISION
-			!-----------------------------------
-			!if endstate is found:
-			!-----------------------------------
-			if (end_state_flag .NE. 0) then			
-				out_end_state_flag	= end_state_flag
+			if (r_ij .LT. radius_tot_ij) then
+                end_state_flag = 2	!COLLISION
 				out_bin_i 			= i
 				out_bin_j 			= j
                 mass_bin_i          = mass(i)
                 mass_bin_j          = mass(j)
+                ! calculate pertinent info for output (E_kin, E_pot, E_tot, a_bin, e_bin)
+                CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)		! system [i,j]
+                a_bin = binary_info_arr_ij(4)
+                e_bin = binary_info_arr_ij(5)
+                !v_CM = (mass(i)*vel(i,:) + mass(j)*vel(j,:))/(mass(i)+mass(j))
+                !r_CM = (mass(i)*pos(i,:) + mass(j)*pos(j,:))/(mass(i)+mass(j))
+                !sma = mass(i)*mass(j) / ((2d0*mass(i)*mass(j)/len3vec(pos(i,:)-pos(j,:))) - & 
+                !    mass(i)*len3vec(vel(i,:)-v_CM)**(2d0) - mass(j)*len3vec(vel(j,:)-v_CM)**(2d0))
+                !ecc = (1d0 - len3vec(cross(((pos(i,:)-r_CM)-(pos(j,:)-r_CM)), (vel(i,:)-vel(j,:))))**(2d0) & 
+                !                    / ((mass(i)+mass(j))*sma))**(1d0/2d0)
 			endif
 			!-----------------------------------
 		ENDIF	!endstate
@@ -803,96 +872,8 @@ CONTAINS
 
 
 		!------------------------------------------------------------
-		!Check for tidal disruptions:
+		!Check for inspirals (endstate = 5)
 		!------------------------------------------------------------
-		if (pass_tidalthreshold_yesno .EQ. 1) then
-		!---------------------------------------
-		!loop over objs:
-		!---------------------------------------
-		do i=1, n_particles,1
-		IF (end_state_flag .EQ. 0) THEN		!if no end-state yet.
-			!-----------------------------------
-			!calc:
-			!-----------------------------------
-			!Read in q matrix:
-			q_in = body_all_q(i,:,:)
-			!calc principal axis (a1,a2,a3):
-			CALL calc_stellar_paxis_a1a2a3(q_in, PA_a1a2a3)
-			max_a1a2a3 = maxval(PA_a1a2a3)
-			!-----------------------------------
-			!check if tidal threshold is passed:
-			!-----------------------------------
-			if (max_a1a2a3 .GT. tidaldisrup_threshold)		end_state_flag = 1	!TIDAL DISRUPTION			
-			!-----------------------------------
-			!if endstate is found:
-			!-----------------------------------
-			if (end_state_flag .NE. 0) then			
-				out_end_state_flag	= end_state_flag
-				out_bin_i 			= i
-				out_bin_j 			= -1
-			endif
-			!-----------------------------------
-		ENDIF	!endstate
-		enddo	!obj loop
-		!---------------------------------------
-		endif	!if we evolve tides
-		!------------------------------------------------------------
-		!Retun info:
-		!------------------------------------------------------------
-		Return_Nbody_coll_tidaldisrup(:) = [out_end_state_flag, out_bin_i, out_bin_j]
-        Return_Nbody_coll_binparams(:) = [mass_bin_i, mass_bin_j, sma, ecc]
-        
-		!------------------------------------------------------------
-	END SUBROUTINE Nbody_coll_tidaldisrup_sub
-	!----------------------------------------------------------------------------------------------------
-	!----------------------------------------------------------------------------------------------------
-	
-
-    !----------------------------------------------------------------------------------------------------
-	SUBROUTINE  Nbody_endstate_sub_4body(Y, Return_Nbody_coll_tidaldisrup, Return_Nbody_coll_binparams)
-	!----------------------------------------------------------------------------------------------------
-		IMPLICIT NONE
-		real*8, dimension(tot_nr_Y_evol_eqs),	intent(in)		:: Y
-		integer, dimension(3),					intent(out)		:: Return_Nbody_coll_tidaldisrup
-		real*8, dimension(4)                            		:: Return_Nbody_coll_binparams
-		real*8, dimension(n_particles,length_Y_per_body_n)		:: body_all_all
-		real*8, dimension(n_particles,3)						:: pos, vel
-		real*8, dimension(n_particles,3,3)						:: body_all_q
-		integer													:: end_state_flag
-		integer													:: out_end_state_flag, out_bin_i, out_bin_j
-		real*8													:: r_ij, radius_tot_ij, r_12, r_kl
-		real*8, dimension(3,3)									:: q_in
-		real*8, dimension(3)									:: PA_a1a2a3
-		real*8													:: max_a1a2a3
-        real*8                                                  :: KE, PE, eps, Mtot, v_dir
-        real*8                                                  :: KE1, KE2, M1, M2, v_dir1, v_dir2
-		real*8, dimension(3)									:: r_CM, v_CM, CM, CM_num, vCM_num
-		real*8, dimension(3)									:: CM1, CM2, vCM1, vCM2
-        real*8                                                  :: fi, fj, fk, fl
-        real*8                                                  :: mass_bin_i, mass_bin_j
-        real*8                                                  :: sma, ecc
-        integer                                                 :: unbound, ub1, ub2
-		
-		!------------------------------------------------------------
-		!UNPACK Y:
-		!------------------------------------------------------------
-		body_all_all(:,:) 	= RESHAPE(Y, (/ n_particles,length_Y_per_body_n /), 	ORDER = (/2,1/))
-		pos(:,:)			= body_all_all(:,1:3)	!we here just use short notation: pos
-		vel(:,:)			= body_all_all(:,4:6)	!we here just use short notation: vel
-		body_all_q(:,:,:)	= RESHAPE(body_all_all(:,7:15),	(/ n_particles,3,3 /), 	ORDER = (/1,2,3/))		
-		!------------------------------------------------------------
-		!Initialize:
-		!------------------------------------------------------------
-		end_state_flag		= 0
-		out_end_state_flag	= 0
-		out_bin_i 			= 0
-		out_bin_j 			= 0	
-		!------------------------------------------------------------
-		!Check for collisions:
-		!------------------------------------------------------------
-		!---------------------------------------
-		!loop over obj pairs:
-		!---------------------------------------
 		do i=1, n_particles,1
 		do j=1, n_particles,1
 		if (i .NE. j) then
@@ -900,28 +881,17 @@ CONTAINS
 			!-----------------------------------
 			!calc:
 			!-----------------------------------
-			r_ij			= len3vec(pos(i,:)-pos(j,:))
 			radius_tot_ij	= radius(i) + radius(j)	
-			!-----------------------------------
-			!COLLISION:
-			!-----------------------------------
-			if (r_ij .LT. radius_tot_ij)					end_state_flag = 2	!COLLISION
-			!-----------------------------------
-			!if endstate is found:
-			!-----------------------------------
-			if (end_state_flag .NE. 0) then			
-				out_end_state_flag	= end_state_flag
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)		! system [i,j]
+            E_tot	    	= binary_info_arr_ij(3)
+            a_bin   		= binary_info_arr_ij(4)   	
+            e_bin           = binary_info_arr_ij(5)
+            if (E_tot .LT. 0.0 .and. (a_bin/radius_tot_ij) .LT. insp_threshold) then
+                end_state_flag = 5			!INSPIRAL STATE	
 				out_bin_i 			= i
 				out_bin_j 			= j
                 mass_bin_i          = mass(i)
                 mass_bin_j          = mass(j)
-                ! calculate the eccentricity for output
-                v_CM = (mass(i)*vel(i,:) + mass(j)*vel(j,:))/(mass(i)+mass(j))
-                r_CM = (mass(i)*pos(i,:) + mass(j)*pos(j,:))/(mass(i)+mass(j))
-                sma = mass(i)*mass(j) / ((2d0*mass(i)*mass(j)/len3vec(pos(i,:)-pos(j,:))) - & 
-                    mass(i)*len3vec(vel(i,:)-v_CM)**(2d0) - mass(j)*len3vec(vel(j,:)-v_CM)**(2d0))
-                ecc = (1d0 - len3vec(cross(((pos(i,:)-r_CM)-(pos(j,:)-r_CM)), (vel(i,:)-vel(j,:))))**(2d0) & 
-                                    / ((mass(i)+mass(j))*sma))**(1d0/2d0)
 			endif
 			!-----------------------------------
 		ENDIF	!endstate
@@ -930,40 +900,44 @@ CONTAINS
 		enddo	!loop over i
 
 
+
 		!------------------------------------------------------------
-		!Check for >(N-2) unbound objects:
+		!Check for >(N-2) unbound objects (endstate = 4)
 		!------------------------------------------------------------
 		IF (end_state_flag .EQ. 0) THEN		!if endstate not found
+
         unbound = 0
 		do i=1, n_particles,1
-        PE = 0.0
-        Mtot = mass(i)                  ! NOTE: these will add the j particles in the upcoming loop
-        CM_num(:) = mass(i)*pos(i,:)
-        CM(:) = 0.0
-		do j=1, n_particles,1 
-      	if (i .NE. j) then
-            r_ij = len3vec(pos(i,:)-pos(j,:))
-            PE = PE + mass(i)*mass(j)/r_ij
-            Mtot = Mtot + mass(j)
-            CM_num = CM_num + pos(j,:)
-        endif
-        enddo   !loop over j
+        do j=1, n_particles,1
+        do k=1, n_particles,1
+        do l=1, n_particles,1
+        if (i .NE. j .AND. i .NE. k .AND. i .NE. l .AND. &
+                    j .NE. k .AND. j .NE. l .AND. k .NE. l) then
+            CM_pos = CoM_3body(pos(j,:), mass(j), pos(k,:), mass(k), pos(l,:), mass(l))
+            CM_vel = CoM_3body(vel(j,:), mass(j), vel(k,:), mass(k), vel(l,:), mass(l))
+            Mtot = mass(j) + mass(k) + mass(l)
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ij)
+            KE = binary_info_arr_ij(1)
+            PE = binary_info_arr_ij(2)
 
-        CM = CM_num / Mtot
-        r_CM = pos(i,:) - CM          ! pointing from the center of mass to the particle
-        v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
-        KE = (1d0/2d0)*mass(i)*len3vec(vel(i,:))**(2d0)
-        eps = (1d0/10d0)                ! set minimum PE threshold (as of now the PE of the single object LT 0.1)
-        if (KE .GT. PE .AND. v_dir .GT. 0d0 .AND. PE .LT. eps) then
-            unbound = unbound + 1
-            
-            if (unbound .EQ. 1)           ub1 = i   ! NOTE: this is keeping track of the two unbound particles
-            if (unbound .GT. 1)           ub2 = i
-            
-        endif
+            r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
+            v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
+
+            if (KE .GT. PE .AND. v_dir .GT. 0d0) then
+                unbound = unbound + 1
+                
+                if (unbound .EQ. 1)           ub1 = i   ! NOTE: this is keeping track of the two unbound particles
+                if (unbound .GT. 1)           ub2 = i
+            endif
+        endif   !if statement for independent particles
+        enddo   !loop over l
+        enddo   !loop over k
+        enddo   !loop over j
         enddo   !loop over i
+
+        ! write info for the bound binary
         if (unbound .GE. n_particles-2) then
-            end_state_flag = 3  !>(N-2) systems are unbound
+            end_state_flag = 4  !>(N-2) systems are unbound
             do j=1, n_particles, 1
                 if (j .NE. ub1 .AND. j .NE. ub2) then
                     out_bin_j = j
@@ -976,30 +950,82 @@ CONTAINS
                     mass_bin_i = mass(i)
                 endif
             enddo
-            ! calculate the eccentricity for output of remaining binary when 2 are unbound
-            v_CM = (mass(out_bin_i)*vel(out_bin_i,:) + mass(out_bin_j)*vel(out_bin_j,:)) & 
-                    / (mass(out_bin_i)+mass(out_bin_j))
-            r_CM = (mass(out_bin_i)*pos(out_bin_i,:) + mass(out_bin_j)*pos(out_bin_j,:)) &
-                    / (mass(out_bin_i)+mass(out_bin_j))
-            sma = mass(out_bin_i)*mass(out_bin_j) / ((2d0*mass(out_bin_i)*mass(out_bin_j) & 
-                    / len3vec(pos(out_bin_i,:)-pos(out_bin_j,:))) - mass(out_bin_i) * len3vec(vel(out_bin_i,:)-v_CM)**(2d0) &
-                    - mass(out_bin_j)*len3vec(vel(out_bin_j,:)-v_CM)**(2d0))
-            ecc = (1d0 - len3vec(cross(((pos(out_bin_i,:)-r_CM)-(pos(out_bin_j,:)-r_CM)), &
-                    (vel(out_bin_i,:)-vel(out_bin_j,:))))**(2d0) / ((mass(out_bin_i)+mass(out_bin_j))*sma))**(1d0/2d0)
+            ! calculate pertinent info for output (E_kin, E_pot, E_tot, a_bin, e_bin)
+            CALL    Calc_binary_info(pos(out_bin_i,:), vel(out_bin_i,:), mass(out_bin_i), & 
+                    pos(out_bin_j,:), vel(out_bin_j,:), mass(out_bin_j), binary_info_arr_ij)		! system [i,j]
+            a_bin = binary_info_arr_ij(4)
+            e_bin = binary_info_arr_ij(5)
         endif
-
-                
-        !-----------------------------------
-        !if endstate is found
-        !-----------------------------------
-!        if (end_state_flag .NE. 0) then
-!            out_end_state_flag = end_state_flag
-!        endif
+        
         ENDIF !endstate
 
 
+        ! FIXME!!! 
 		!------------------------------------------------------------
-		!Check for 2 unbound binary systems moving away from each other: #FIXME working no this...
+		!Check for stable triple with 1 unbound object (endstate = 3)
+		!------------------------------------------------------------
+		IF (end_state_flag .EQ. 0) THEN		!if endstate not found
+
+        unbound = 0
+		do i=1, n_particles,1
+        do j=1, n_particles,1
+        do k=1, n_particles,1
+        do l=1, n_particles,1
+        if (i .NE. j .AND. i .NE. k .AND. i .NE. l .AND. &
+                    j .NE. k .AND. j .NE. l .AND. k .NE. l) then
+            CM_pos = CoM_3body(pos(j,:), mass(j), pos(k,:), mass(k), pos(l,:), mass(l))
+            CM_vel = CoM_3body(vel(j,:), mass(j), vel(k,:), mass(k), vel(l,:), mass(l))
+            Mtot = mass(j) + mass(k) + mass(l)
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ij)
+            KE = binary_info_arr_ij(1)
+            PE = binary_info_arr_ij(2)
+
+            r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
+            v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
+
+            if (KE .GT. PE .AND. v_dir .GT. 0d0) then
+                unbound = unbound + 1
+                ub1 = i   ! NOTE: this is keeping track of the unbound particle
+            endif
+        endif   !if statement for independent particles
+        enddo   !loop over l
+        enddo   !loop over k
+        enddo   !loop over j
+        enddo   !loop over i
+        
+        ! Now, we see if the three remaining are in a stable triple system
+        if (unbound .EQ. 1) then
+            do i=1, n_particles,1
+            do j=1, n_particles,1
+            do k=1, n_particles,1
+            if (i .NE. j .AND. i .NE. k .AND. j .NE. k .AND. &
+                        i .NE. ub1 .AND. j .NE. ub1 .AND. k .NE. ub1) then
+                ! assume i,j makes up the inner binary
+                CALL Calc_binary_L(pos(i,:),vel(i,:),mass(i),pos(j,:),vel(j,:),mass(j), Lin_vec)
+                CM_pos = CoM_2body(pos(i,:), mass(i), pos(j,:), mass(j))
+                CM_vel = CoM_2body(vel(i,:), mass(i), vel(j,:), mass(j))
+                Mtot = mass(i) + mass(j)
+                
+                CALL Calc_binary_L(CM_pos,CM_vel,Mtot,pos(k,:),vel(k,:),mass(k), Lout_vec)
+            
+                theta = ACOS(dot_product(Lin_vec,Lout_vec))
+
+                ! now, we see if a stable triple was formed...
+            
+
+            endif
+            enddo
+            enddo
+            enddo
+        
+        endif ! if statement for single unbound object
+
+        ENDIF
+
+
+
+		!------------------------------------------------------------
+		!Check for 2 unbound binary systems moving away from each other (endstate=6)
 		!------------------------------------------------------------
 !		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
 !        unbound = 0
@@ -1077,45 +1103,52 @@ CONTAINS
 
 
 		!------------------------------------------------------------
-		!Check for 1 unbound object and Kozai: FIXME working on this...
+		!Check for tidal disruptions:
 		!------------------------------------------------------------
-        ! First, we check that one of the 4 objects is unbound
-!		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
-!        unbound = 0
-!		do i=1, n_particles,1
-!        PE = 0.0
-!        Mtot = mass(i)                  ! NOTE: these will add the j particles in the upcoming loop
-!        CM_num(:) = mass(i)*pos(i,:)
-!        CM(:) = 0.0
-!		do j=1, n_particles,1 
-!		if (i .NE. j) then
-!            r_ij = len3vec(pos(i,:)-pos(j,:))
-!            PE = PE + mass(i)*mass(j)/r_ij
-!            Mtot = Mtot + mass(j)
-!            CM_num = CM_num + pos(j,:)
-!        endif
-!        enddo   !loop over j
-!
-!        CM = CM_num / Mtot
-!        r_CM = pos(i,:) - CM          ! pointing from the center of mass to the particle
-!        v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
-!        KE = (1d0/2d0)*mass(i)*len3vec(vel(i,:))**(2d0)
-!        eps = (1d0/10d0)                ! set minimum PE threshold
-!        if (KE .GT. PE .AND. v_dir .GT. 0d0 .AND. PE .LT. eps) then
-!            unbound = unbound + 1
-!        endif
-!        enddo   !loop over i
-!        if (unbound .GE. n_particles-2)                     end_state_flag = 3  !>(N-2) systems are unbound
-!        !-----------------------------------
-!        !if endstate is found
-!        !-----------------------------------
-!        if (end_state_flag .NE. 0) then
-!            out_end_state_flag = end_state_flag
-!        endif
-!        ENDIF !endstate
+		if (pass_tidalthreshold_yesno .EQ. 1) then
+		!---------------------------------------
+		!loop over objs:
+		!---------------------------------------
+		do i=1, n_particles,1
+		IF (end_state_flag .EQ. 0) THEN		!if no end-state yet.
+			!-----------------------------------
+			!calc:
+			!-----------------------------------
+			!Read in q matrix:
+			q_in = body_all_q(i,:,:)
+			!calc principal axis (a1,a2,a3):
+			CALL calc_stellar_paxis_a1a2a3(q_in, PA_a1a2a3)
+			max_a1a2a3 = maxval(PA_a1a2a3)
+			!-----------------------------------
+			!check if tidal threshold is passed:
+			!-----------------------------------
+			if (max_a1a2a3 .GT. tidaldisrup_threshold) then
+                end_state_flag = 1	!TIDAL DISRUPTION			
+				out_bin_i 			= i
+				out_bin_j 			= -1
+            endif
+			!-----------------------------------
+		ENDIF	!endstate
+		enddo	!obj loop
+		!---------------------------------------
+		endif	!if we evolve tides
+		!------------------------------------------------------------
+
+
+
+		!Retun info:
+        Return_Nbody_endstate(:) = [0, 0, 0]
+        !-----------------------------------
+        !if endstate is found
+        !-----------------------------------
+        if (end_state_flag .NE. 0) then
+            out_end_state_flag = end_state_flag
+            Return_Nbody_endstate(:) = [out_end_state_flag, out_bin_i, out_bin_j]
+            Return_endstate_binparams(:) = [mass_bin_i, mass_bin_j, a_bin, e_bin]
+        endif
         
 		!------------------------------------------------------------
-	END SUBROUTINE Nbody_endstate_sub_4body
+	END SUBROUTINE Nbody_endstate_sub
 	!----------------------------------------------------------------------------------------------------
 	!----------------------------------------------------------------------------------------------------
 	
@@ -1485,16 +1518,16 @@ CONTAINS
 		!------------------------------------------------------------
 		!Write info to file:
 		!------------------------------------------------------------
-		!for 4 particle ADDED BY MIKE
+		!for 4 particle
 		if (n_particles .EQ. 4) then
             if (downsamp .EQ. 0) then
-			    write(10,*) pos(1,:), pos(2,:), pos(3,:), pos(4,:)
-			    write(18,*) vel(1,:), vel(2,:), vel(3,:), vel(4,:)
+			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
             endif
             if (downsamp .EQ. 1 .AND. time_t .GE. ds*timesamp) then
-			    write(10,*) pos(1,:), pos(2,:), pos(3,:), pos(4,:)
-			    write(18,*) vel(1,:), vel(2,:), vel(3,:), vel(4,:)
+			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
                 ds = ds + 1
 		    endif
@@ -1644,12 +1677,12 @@ CONTAINS
 			    acc_CM_pointmass_NT_ij(:)						 = - (mass(j)/(r_ij**2.))*n_ij
 				!acc term: 1PN, 2PN
                 !acc term: 1PN
-                if (use_12PN .EQ. 1) acc_CM_pointmass_1PN_ij(:)   =  (PN_gamma)*(mass(j)/(r_ij**2d0)) &
+                if (use_1PN .EQ. 1) acc_CM_pointmass_1PN_ij(:)   =  (PN_gamma)*(mass(j)/(r_ij**2d0)) &
 *(n_ij*(-vii_CM-2d0*vjj_CM+4d0*vij_CM+(3d0/2d0)*(n_dot_vj_CM)**(2d0)+5d0*(mass(i)/r_ij)+4d0*(mass(j)/r_ij)) &
 +(vi_CM-vj_CM)*(4d0*n_dot_vi_CM-3d0*n_dot_vj_CM))
-                if (use_12PN .EQ. 0) acc_CM_pointmass_1PN_ij(:)  =   0d0
+                if (use_1PN .EQ. 0) acc_CM_pointmass_1PN_ij(:)  =   0d0
                 !acc term: 2PN
-                if (use_12PN .EQ. 1) acc_CM_pointmass_2PN_ij(:)   =  ((PN_gamma)**(2d0))*(mass(j)/(r_ij**2d0)) &
+                if (use_2PN .EQ. 1) acc_CM_pointmass_2PN_ij(:)   =  ((PN_gamma)**(2d0))*(mass(j)/(r_ij**2d0)) &
 * (n_ij * (-2d0*vjj_CM**(2d0) + 4d0*vjj_CM*vij_CM - 2d0*vij_CM**(2d0) + (3d0/2d0)*vii_CM*n_dot_vj_CM**(2d0) &
 + (9d0/2d0)*vjj_CM*n_dot_vj_CM**(2d0) - 6d0*vij_CM*n_dot_vj_CM**(2d0) - (15d0/8d0)*n_dot_vj_CM**(4d0) &
 + (mass(i)/r_ij) * (-(15d0/4d0)*vii_CM + (5d0/4d0)*vjj_CM - (5d0/2d0)*vij_CM + (39d0/2d0)*n_dot_vi_CM**(2d0) &
@@ -1660,7 +1693,7 @@ CONTAINS
 + (9d0/2d0)*n_dot_vj_CM**(3d0) + (mass(i)/r_ij) * ((-63d0/4d0)*n_dot_vi_CM + (55d0/4d0)*n_dot_vj_CM) &
 + (mass(j)/r_ij)*(-2d0*n_dot_vi_CM - 2d0*n_dot_vj_CM))) + ((PN_gamma)**(2d0)) * (mass(j)/(r_ij**(4d0))) &
 * n_ij * (-(57d0/4d0)*mass(i)**(2d0) - 9d0*mass(j)**2d0 - (69d0/2d0)*mass(i)*mass(j))
-                if (use_12PN .EQ. 0) acc_CM_pointmass_2PN_ij(:)   =   0d0
+                if (use_2PN .EQ. 0) acc_CM_pointmass_2PN_ij(:)   =   0d0
 				!acc term: 2.5PN
 			    if (use_25PN .EQ. 1) acc_CM_pointmass_25PN_ij(:) =	(PN_gamma**(5d0/2d0))*(4d0/5d0)*(mass(i)*mass(j)/(r_ij**3d0))		&
 																	* (vel_ij*(-vel_ij2 + 2d0*(mass(i)/r_ij) - 8d0*(mass(j)/r_ij))		&
@@ -1837,8 +1870,8 @@ CONTAINS
 	real*8, dimension(10)								:: endsim_out_xtra_2_info_REAL
 	integer, dimension(10)								:: Return_Nbody_info_INT_1
 	real*8, dimension(10)								:: Return_3body_Info_REAL_XTRAINFO
-	integer, dimension(3)								:: Return_Nbody_coll_tidaldisrup
-	real*8, dimension(4)								:: Return_Nbody_coll_binparams
+	integer, dimension(3)								:: Return_Nbody_endstate
+	real*8, dimension(4)								:: Return_endstate_binparams
 	integer												:: endsim_end_state_flag, NBsystem_state_flag
     integer                                             :: NBsystem_bin_i, NBsystem_bin_j   ! Added by Mike
 	integer												:: stepc, nrc_usrstate
@@ -1927,12 +1960,12 @@ CONTAINS
 	allocate(IC_Yevol_vec(tot_nr_Y_evol_eqs))
 	allocate(endsim_Y(tot_nr_Y_evol_eqs))
 	!solver params:
-	read(*,*), Nbody_solver_params_1_INT(:)		! [use_12PN, use_25PN, Identify_NBody_endstate, max_sim_nrsteps, FREE, outputinfo_screenfiles, nr_nbody_particles, ...]
-	read(*,*), Nbody_solver_params_2_REAL(:)	! [scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold, max_simtime_sec, IMSbinsingle_threshold, ...]
+	read(*,*), Nbody_solver_params_1_INT(:)		! [use_1PN, use_2PN, use_25PN, outputinfo_screenfiles, Identify_3Body_endstate, max_sim_nrsteps, ...]
+	read(*,*), Nbody_solver_params_2_REAL(:)	! [scale_dt, max_sim_time, max_simtime_sec, evolvetides_threshold, ENDbinsingle_threshold, IMSbinsingle_threshold, tidaldisrup_threshold, insp_threshold, ...]
 	!Input ini pos, vel, mass, radius,.. for each body i:
 	do i=1, n_particles,1 
 		!constants:
-		read(*,*), IC_body_all_const_vec(i,:)	! [Mass, Radi, gas_n, gas_gamma, Mqp, evoTides_yesno, RigidSph_yesno, 0,0,0]
+		read(*,*), IC_body_all_const_vec(i,:)	! [Mass, Radi, RigidSph_yesno, evoTides_yesno, gas_n, gas_gamma, Mqp, 0,0,0]
 		!pos,vel:
 		read(*,*), IC_par_pos(i,:)				!pos
 		read(*,*), IC_par_vel(i,:)				!vel
@@ -1998,69 +2031,6 @@ CONTAINS
 	endif	!code version 2
 	!---------------------------------------
 	!---------------------------------------
-	!---------------------------------------
-	!Code version 4:        ! ADDED BY MIKE --- FOR USE IN 4-BODY STUDY 
-	!---------------------------------------
-	if (IC_code_version .EQ. 4) then
-	!---------------------------------------
-	open (unit=10, file='NbodyTides_dataout_pos.dat',			status='REPLACE', action='write')
-	open (unit=11, file='NbodyTides_dataout_a1a2a3.dat',		status='REPLACE', action='write')
-	open (unit=12, file='NbodyTides_dataout_Eself.dat',			status='REPLACE', action='write')
-	open (unit=13, file='NbodyTides_dataout_Etot.dat',			status='REPLACE', action='write')
-	open (unit=14, file='NbodyTides_dataout_binij_info.dat',	status='REPLACE', action='write')
-	open (unit=15, file='NbodyTides_dataout_full_q.dat',		status='REPLACE', action='write')
-	open (unit=16, file='NbodyTides_dataout_resonance.dat',		status='REPLACE', action='write')
-	open (unit=17, file='NbodyTides_dataout_user_states.dat',	status='REPLACE', action='write')
-	open (unit=18, file='NbodyTides_dataout_vel.dat', 			status='REPLACE', action='write')
-	open (unit=20, file='Nbody_endsim_info_data.txt', 			status='REPLACE', action='write')
-	open (unit=21, file='NbodyTides_dataout_3bodybinsin.txt', 	status='REPLACE', action='write')
-    open (unit=22, file='Nbody_initial_conditions.txt',         status='REPLACE', action='write')
-	
-	!--------------------------------------------------------
-	!Read in data:
-	!--------------------------------------------------------
-	!nr particles:
-	read(*,*),  n_particles
-	!calc:
-	tot_nr_Y_evol_eqs	= n_particles*length_Y_per_body_n
-	!Allocate:
-	allocate(IC_par_pos(n_particles,3))
-	allocate(IC_par_vel(n_particles,3))
-	allocate(IC_par_q(n_particles,3,3))
-	allocate(IC_par_qdot(n_particles,3,3))
-	allocate(IC_body_all_const_vec(n_particles,10))
-	allocate(mass(n_particles))
-	allocate(radius(n_particles))
-	allocate(gas_n(n_particles))
-	allocate(gas_gamma(n_particles))
-	allocate(Mqp_sph(n_particles))
-	allocate(evoTides_yesno(n_particles))
-	allocate(RigidSph_yesno(n_particles))
-	allocate(IC_Yevol_vec(tot_nr_Y_evol_eqs))
-	allocate(endsim_Y(tot_nr_Y_evol_eqs))
-	!solver params:
-	read(*,*), Nbody_solver_params_1_INT(:)		! [use_12PN, use_25PN, Identify_NBody_endstate, max_sim_nrsteps, FREE, outputinfo_screenfiles, nr_nbody_particles, ...]
-	read(*,*), Nbody_solver_params_2_REAL(:)	! [scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold, max_simtime_sec, IMSbinsingle_threshold, ...]
-	!Input ini pos, vel, mass, radius,.. for each body i:
-	do i=1, n_particles,1 
-		!constants:
-		read(*,*), IC_body_all_const_vec(i,:)	! [Mass, Radi, gas_n, gas_gamma, Mqp, evoTides_yesno, RigidSph_yesno, 0,0,0]
-		!pos,vel:
-		read(*,*), IC_par_pos(i,:)				!pos
-		read(*,*), IC_par_vel(i,:)				!vel
-		!q:
-		read(*,*), IC_par_q(i,1,:)				!q(1,:)
-		read(*,*), IC_par_q(i,2,:)				!q(2,:)
-		read(*,*), IC_par_q(i,3,:)				!q(3,:)
-		!qdot:
-		read(*,*), IC_par_qdot(i,1,:)			!qdot(1,:)
-		read(*,*), IC_par_qdot(i,2,:)			!qdot(2,:)
-		read(*,*), IC_par_qdot(i,3,:)			!qdot(3,:)
-        write(22,*) IC_body_all_const_vec(i,1:2), IC_par_pos(i,:), IC_par_vel(i,:) !write intiial conditions
-	enddo
-	!---------------------------------------
-	endif	!code version 4
-	!---------------------------------------
 	!--------------------------------------------------------
 	!--------------------------------------------------------
 
@@ -2068,32 +2038,32 @@ CONTAINS
 	!--------------------------------------------------------
 	!Define:
 	!--------------------------------------------------------
-	!Nbody_solver_params_1_INT:  [use_12PN, use_25PN, Identify_NBody_endstate, max_sim_nrsteps, FREE, outputinfo_screenfiles, nr_nbody_particles, ...]
-	!Nbody_solver_params_2_REAL: [scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold, max_simtime_sec, IMSbinsingle_threshold, tidaldisrup_threshold, insp_threshold, ...]
+	!Nbody_solver_params_1_INT:  [use_1PN, use_2PN, use_25PN, outputinfo_screenfiles, Identify_3Body_endstate, max_sim_nrsteps, ...]
+	!Nbody_solver_params_2_REAL: [scale_dt, max_sim_time, max_simtime_sec, evolvetides_threshold, ENDbinsingle_threshold, IMSbinsingle_threshold, tidaldisrup_threshold, insp_threshold, ...]
 	!from Nbody_solver_params_1_INT:
-	use_12PN						= Nbody_solver_params_1_INT(1)
-	use_25PN 						= Nbody_solver_params_1_INT(2)
-	Identify_NBody_endstate 		= Nbody_solver_params_1_INT(3)
-	max_sim_nrsteps					= Nbody_solver_params_1_INT(4)
-	!FREE							= Nbody_solver_params_1_INT(5)
-	outputinfo_screenfiles			= Nbody_solver_params_1_INT(6)
+	use_1PN					    	= Nbody_solver_params_1_INT(1)
+	use_2PN 					  	= Nbody_solver_params_1_INT(2)
+    use_25PN                        = Nbody_solver_params_1_INT(3)
+	outputinfo_screenfiles			= Nbody_solver_params_1_INT(4)
+	Identify_3Body_endstate 		= Nbody_solver_params_1_INT(5)
+	max_sim_nrsteps					= Nbody_solver_params_1_INT(6)
 	!from Nbody_solver_params_2_REAL:
 	scale_dt						= Nbody_solver_params_2_REAL(1)
 	max_sim_time					= Nbody_solver_params_2_REAL(2)
-	evolvetides_threshold			= Nbody_solver_params_2_REAL(3)
-	ENDbinsingle_threshold			= Nbody_solver_params_2_REAL(4)
-	max_simtime_sec					= Nbody_solver_params_2_REAL(5)
-	IMSbinsingle_threshold			= Nbody_solver_params_2_REAL(6)
-	tidaldisrup_threshold			= Nbody_solver_params_2_REAL(7)
-	insp_threshold					= Nbody_solver_params_2_REAL(8)
+	max_simtime_sec					= Nbody_solver_params_2_REAL(3)
+	insp_threshold					= Nbody_solver_params_2_REAL(4)
+	evolvetides_threshold			= Nbody_solver_params_2_REAL(5)
+	ENDbinsingle_threshold			= Nbody_solver_params_2_REAL(6)
+	IMSbinsingle_threshold			= Nbody_solver_params_2_REAL(7)
+	tidaldisrup_threshold			= Nbody_solver_params_2_REAL(8)
 	!from IC_body_all_const_vec:
 	mass(:)							= IC_body_all_const_vec(:,1)
 	radius(:)						= IC_body_all_const_vec(:,2)
-	gas_n(:)						= IC_body_all_const_vec(:,3)
-	gas_gamma(:)					= IC_body_all_const_vec(:,4)
-	Mqp_sph(:)						= IC_body_all_const_vec(:,5)
-	evoTides_yesno(:)				= INT(IC_body_all_const_vec(:,6))
-	RigidSph_yesno(:)				= INT(IC_body_all_const_vec(:,7))
+	RigidSph_yesno(:)				= INT(IC_body_all_const_vec(:,3))
+	evoTides_yesno(:)				= INT(IC_body_all_const_vec(:,4))
+	gas_n(:)						= IC_body_all_const_vec(:,5)
+	gas_gamma(:)					= IC_body_all_const_vec(:,6)
+	Mqp_sph(:)						= IC_body_all_const_vec(:,7)
 	!Identity matrix:
 	I_MAT(:,:) = 0d0
 	I_MAT(1,1) = 1d0
@@ -2233,307 +2203,157 @@ CONTAINS
 			endif	!code version 1
 		endif
 		!----------------------------------------------------				
-		
-        !----------------------------------------------------
+				
+		!----------------------------------------------------
 		!N-body section:
 		!----------------------------------------------------
-				
-        if (n_particles .LT. 4) then
-            !-----------------------------------	
-            !Check for collisions:
-            !-----------------------------------
-            CALL Nbody_coll_tidaldisrup_sub(Y, Return_Nbody_coll_tidaldisrup, Return_Nbody_coll_binparams)
-                
-            NBsystem_state_flag = Return_Nbody_coll_tidaldisrup(1)		! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
-            !NOTE: if we also use 3body-part then NBsystem_state_flag from here will be overwritten in 3body-part.
-            !-----------------------------------
-            !Get Info about most-bound-pair [i,j]
-            !-----------------------------------
-            CALL Nbody_info_module_sub(Y, Return_Nbody_info_REAL_1, Return_Nbody_info_REAL_2, Return_Nbody_info_INT_1)
-            !Define:
-            Etot_bin_ij		= Return_Nbody_info_REAL_1(3)
-            a_bin_ij		= Return_Nbody_info_REAL_1(4)
-            e_bin_ij		= Return_Nbody_info_REAL_1(5)
-            rdist_bin_ij	= Return_Nbody_info_REAL_2(1)
-            maxrad_bin_i	= Return_Nbody_info_REAL_2(2)	!radius along maximum principal axis (rad(sph)*max(principal a))
-            maxrad_bin_j	= Return_Nbody_info_REAL_2(3)	!radius along maximum principal axis (rad(sph)*max(principal a))
-            tidradius_total_bin_ij	= maxrad_bin_i + maxrad_bin_j
-            bin_i 			= Return_Nbody_info_INT_1(1)
-            bin_j 			= Return_Nbody_info_INT_1(2)
-            sphradius_total_bin_ij	= radius(bin_i)+radius(bin_j)
-            if (Etot_bin_ij .LT. 0.0)	bound_bin_ij = 1
-            if (Etot_bin_ij .GT. 0.0)	bound_bin_ij = 0
-            !format:
-            !Return_Nbody_info_REAL_1(1:5)	= [binary_info_arr_ij(:)]
-            !Return_Nbody_info_INT_1(1:2)	= [bin_i, bin_j]
-            !Return_Nbody_info_REAL_2(1:3)	= [r_ij, radtidmax_bin_i, radtidmax_bin_j]	
-            !-----------------------------------
-            !user states:
-            !-----------------------------------
-            !USER STATE: 20 EXAMPLE! YOU CAN ADD MODE USR STATES!!
-            if (flag_usrstate20 .EQ. 0 .and. bound_bin_ij .EQ. 1 .and.	(a_bin_ij/tidradius_total_bin_ij)		.LT. 3.0) then
-                !SELECT output info:
-                output_userstate_info_INT(1:5) = [20, bin_i, bin_j, IMS_rp_counter, IMS_binsin_counter]	!'IMS_rp_counter, IMS_binsin_counter' are only active if we have 3 objs.
-                !SAVE to file (code version 1):
-                if (IC_code_version .EQ. 1) then
-                    write(17,*) output_userstate_info_INT	!write INT info
-                    write(17,*) output_userstate_info_REAL	!write REAL info
-                    print*, 'usrstate20'
-                endif	!code version 1
-                !SAVE in arrays (code version 2):
-                if (IC_code_version .EQ. 2) then
-                    out_usrstate_INT(nrc_usrstate,:)	= output_userstate_info_INT(:)
-                    out_usrstate_REAL(nrc_usrstate,:)	= output_userstate_info_REAL(:)
-                    nrc_usrstate						= nrc_usrstate + 1
-                endif	!code version 2
-                !FLAG usrstate:
-                flag_usrstate20 = 1
-            endif		
-            !-----------------------------------
-            !----------------------------------------------------
-        
-            !----------------------------------------------------
-            !3-body section:
-            !----------------------------------------------------	
-            !-----------------------------------
-            !Get Info: 3Body state [[i,j],k]
-            !-----------------------------------
-            if (Identify_NBody_endstate .EQ. 1 .and. n_particles .EQ. 3) then
-                CALL analyze_3body_state_info_sub(Y, Return_3body_Info_REAL, Return_3body_Info_INT, Return_3body_Info_REAL_XTRAINFO)
-                !Output format:
-                !Return_3body_Info_REAL(1:10)			= [1 E_kin(ij), 2 E_pot(ij), 3 E_tot(ij), 4 a_bin(ij), 5 e_bin(ij), 6 E_kin(ijk), 7 E_pot(ijk), 8 E_tot(ijk), 9 a_bin(ijk), 10 e_bin(ijk)]
-                !Return_3body_Info_INT(1:5)				= [out_end_state_flag, out_bin_i, out_bin_j, out_sin_k, out_IMS_bin_yesno]
-                !Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
-                NBsystem_state_flag = Return_3body_Info_INT(1)				! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
-                IMSbin_yesno		= Return_3body_Info_INT(5)				! if IMS yes = 1, otherwise 0.
-            endif	
-            !-----------------------------------
-            !3-Body IMS Resonance analysis:
-            !-----------------------------------
-            if (NBsystem_state_flag .EQ. 0 .and. Identify_NBody_endstate .EQ. 1 .and. n_particles .EQ. 3) then
-                
-                !IMS bin-sin config 'now'(1) yes/no:
-                IMSbin_1_yesno = IMSbin_yesno	!output from 'analyze_3body_state_info_sub' above.
-                
-                !IF IMS binary is created (label 1):	
-                if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
-                    !write info to file
-                    if (IC_code_version .EQ. 1) then
-                        write(16,*) 1, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
-                    endif	!code version 1
-                    !reset peri-center counter and dist array:
-                    IMS_rp_counter		= 0
-                    dist_ij_3tarr(:)	= 0.0
-                    !counter:
-                    IMS_binsin_counter	= IMS_binsin_counter+1
-                endif
-                
-                !IF IMS binary is destroyed (label 0):
-                if (IMSbin_1_yesno .EQ. 0 .and. IMSbin_0_yesno .EQ. 1) then
-                    !write info to file
-                    if (IC_code_version .EQ. 1) then
-                        write(16,*) 0, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
-                    endif	!code version 1				
-                    !reset peri-center counter and dist array:
-                    IMS_rp_counter		= 0
-                    dist_ij_3tarr(:)	= 0.0 
-                    !counter:
-                    !IMS_binsin_counter = IMS_binsin_counter+1
-                endif
+		!-----------------------------------	
+		!Check for endstate:
+		!-----------------------------------
+		CALL Nbody_endstate_sub(Y, Return_Nbody_endstate, Return_endstate_binparams)
+            
+		NBsystem_state_flag = Return_Nbody_endstate(1)		! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
+        NBsystem_bin_i = Return_Nbody_endstate(2)       ! Added by Mike
+        NBsystem_bin_j = Return_Nbody_endstate(3)       ! Added by Mike
+		!NOTE: if we also use 3body-part then NBsystem_state_flag from here will be overwritten in 3body-part.
+		!-----------------------------------
+		!Get Info about most-bound-pair [i,j]
+		!-----------------------------------
+		CALL Nbody_info_module_sub(Y, Return_Nbody_info_REAL_1, Return_Nbody_info_REAL_2, Return_Nbody_info_INT_1)
+		!Define:
+		Etot_bin_ij		= Return_Nbody_info_REAL_1(3)
+		a_bin_ij		= Return_Nbody_info_REAL_1(4)
+		e_bin_ij		= Return_Nbody_info_REAL_1(5)
+		rdist_bin_ij	= Return_Nbody_info_REAL_2(1)
+		maxrad_bin_i	= Return_Nbody_info_REAL_2(2)	!radius along maximum principal axis (rad(sph)*max(principal a))
+		maxrad_bin_j	= Return_Nbody_info_REAL_2(3)	!radius along maximum principal axis (rad(sph)*max(principal a))
+		tidradius_total_bin_ij	= maxrad_bin_i + maxrad_bin_j
+		bin_i 			= Return_Nbody_info_INT_1(1)
+		bin_j 			= Return_Nbody_info_INT_1(2)
+		sphradius_total_bin_ij	= radius(bin_i)+radius(bin_j)
+		if (Etot_bin_ij .LT. 0.0)	bound_bin_ij = 1
+		if (Etot_bin_ij .GT. 0.0)	bound_bin_ij = 0
+		!format:
+		!Return_Nbody_info_REAL_1(1:5)	= [binary_info_arr_ij(:)]
+		!Return_Nbody_info_INT_1(1:2)	= [bin_i, bin_j]
+		!Return_Nbody_info_REAL_2(1:3)	= [r_ij, radtidmax_bin_i, radtidmax_bin_j]	
 
-                !Count peri-center passages if we are in IMS state:
-                if (IMSbin_0_yesno .EQ. 1 .and. IMSbin_1_yesno .EQ. 1) then
-                    dist_ij				= Return_3body_Info_REAL_XTRAINFO(1)
-                    dist_ij_3tarr(1:2)	= dist_ij_3tarr(2:3)
-                    dist_ij_3tarr(3)	= dist_ij
-                    !check for peri-center passage:
-                    if (dist_ij_3tarr(1) .GT. dist_ij_3tarr(2) .and. dist_ij_3tarr(3) .GT. dist_ij_3tarr(2)) then
-                        IMS_rp_counter = IMS_rp_counter+1
-                    endif
-                endif 
-                
-                !save most recent initial (MRini) IMS (a,e):
-                if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
-                    MRini_IMS_a	= Return_3body_Info_REAL(4)
-                    MRini_IMS_e	= Return_3body_Info_REAL(5)
-                endif			
-                            
-                !Update IMS 'before'(0):
-                IMSbin_0_yesno = IMSbin_1_yesno
-                
-            endif	
-            !-----------------------------------
-            !Track rmin between 12,13,23:
-            !-----------------------------------
-            !Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
-            r_12 = Return_3body_Info_REAL_XTRAINFO(2)
-            r_13 = Return_3body_Info_REAL_XTRAINFO(3)
-            r_23 = Return_3body_Info_REAL_XTRAINFO(4)
-            if (r_12 .LT. rmin_12)	rmin_12 = r_12
-            if (r_13 .LT. rmin_13)	rmin_13 = r_13
-            if (r_23 .LT. rmin_23)	rmin_23 = r_23
-            !-----------------------------------
-            !----------------------------------------------------
 
-            !----------------------------------------------------
-            !Extra info for detailed analysis:
-            !----------------------------------------------------
-            if (IC_code_version .EQ. 1) then
-            if (outputinfo_screenfiles .EQ. 1)	CALL TEST_sub(Y,TOUT)
-            endif	!code version 1					
-            !----------------------------------------------------
-        endif
 
-        ! ADDED BY MIKE        
-        if (n_particles .EQ. 4) then
-            !-----------------------------------	
-            !Check for collisions:
-            !-----------------------------------
-            CALL Nbody_endstate_sub_4body(Y, Return_Nbody_coll_tidaldisrup, Return_Nbody_coll_binparams)
-                
-            NBsystem_state_flag = Return_Nbody_coll_tidaldisrup(1)		! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
-            NBsystem_bin_i = Return_Nbody_coll_tidaldisrup(2)       ! Added by Mike
-            NBsystem_bin_j = Return_Nbody_coll_tidaldisrup(3)       ! Added by Mike
-            !NOTE: if we also use 3body-part then NBsystem_state_flag from here will be overwritten in 3body-part.
-            !-----------------------------------
-            !Get Info about most-bound-pair [i,j]
-            !-----------------------------------
-            CALL Nbody_info_module_sub(Y, Return_Nbody_info_REAL_1, Return_Nbody_info_REAL_2, Return_Nbody_info_INT_1)
-            !Define:
-            Etot_bin_ij		= Return_Nbody_info_REAL_1(3)
-            a_bin_ij		= Return_Nbody_info_REAL_1(4)
-            e_bin_ij		= Return_Nbody_info_REAL_1(5)
-            rdist_bin_ij	= Return_Nbody_info_REAL_2(1)
-            maxrad_bin_i	= Return_Nbody_info_REAL_2(2)	!radius along maximum principal axis (rad(sph)*max(principal a))
-            maxrad_bin_j	= Return_Nbody_info_REAL_2(3)	!radius along maximum principal axis (rad(sph)*max(principal a))
-            tidradius_total_bin_ij	= maxrad_bin_i + maxrad_bin_j
-            bin_i 			= Return_Nbody_info_INT_1(1)
-            bin_j 			= Return_Nbody_info_INT_1(2)
-            sphradius_total_bin_ij	= radius(bin_i)+radius(bin_j)
-            if (Etot_bin_ij .LT. 0.0)	bound_bin_ij = 1
-            if (Etot_bin_ij .GT. 0.0)	bound_bin_ij = 0
-            !format:
-            !Return_Nbody_info_REAL_1(1:5)	= [binary_info_arr_ij(:)]
-            !Return_Nbody_info_INT_1(1:2)	= [bin_i, bin_j]
-            !Return_Nbody_info_REAL_2(1:3)	= [r_ij, radtidmax_bin_i, radtidmax_bin_j]	
-            !-----------------------------------
-            !user states:
-            !-----------------------------------
-            !USER STATE: 20 EXAMPLE! YOU CAN ADD MODE USR STATES!!
-            if (flag_usrstate20 .EQ. 0 .and. bound_bin_ij .EQ. 1 .and.	(a_bin_ij/tidradius_total_bin_ij)		.LT. 3.0) then
-                !SELECT output info:
-                output_userstate_info_INT(1:5) = [20, bin_i, bin_j, IMS_rp_counter, IMS_binsin_counter]	!'IMS_rp_counter, IMS_binsin_counter' are only active if we have 3 objs.
-                !SAVE to file (code version 1):
-                if (IC_code_version .EQ. 1) then
-                    write(17,*) output_userstate_info_INT	!write INT info
-                    write(17,*) output_userstate_info_REAL	!write REAL info
-                    print*, 'usrstate20'
-                endif	!code version 1
-                !SAVE in arrays (code version 2):
-                if (IC_code_version .EQ. 2) then
-                    out_usrstate_INT(nrc_usrstate,:)	= output_userstate_info_INT(:)
-                    out_usrstate_REAL(nrc_usrstate,:)	= output_userstate_info_REAL(:)
-                    nrc_usrstate						= nrc_usrstate + 1
-                endif	!code version 2
-                !FLAG usrstate:
-                flag_usrstate20 = 1
-            endif		
-            !-----------------------------------
-            !----------------------------------------------------
-        
-            !----------------------------------------------------
-            !3-body section:
-            !----------------------------------------------------	
-            !-----------------------------------
-            !Get Info: 3Body state [[i,j],k]
-            !-----------------------------------
-            if (Identify_NBody_endstate .EQ. 1 .and. n_particles .EQ. 3) then
-                CALL analyze_3body_state_info_sub(Y, Return_3body_Info_REAL, Return_3body_Info_INT, Return_3body_Info_REAL_XTRAINFO)
-                !Output format:
-                !Return_3body_Info_REAL(1:10)			= [1 E_kin(ij), 2 E_pot(ij), 3 E_tot(ij), 4 a_bin(ij), 5 e_bin(ij), 6 E_kin(ijk), 7 E_pot(ijk), 8 E_tot(ijk), 9 a_bin(ijk), 10 e_bin(ijk)]
-                !Return_3body_Info_INT(1:5)				= [out_end_state_flag, out_bin_i, out_bin_j, out_sin_k, out_IMS_bin_yesno]
-                !Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
-                NBsystem_state_flag = Return_3body_Info_INT(1)				! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
-                IMSbin_yesno		= Return_3body_Info_INT(5)				! if IMS yes = 1, otherwise 0.
-            endif	
-            !-----------------------------------
-            !3-Body IMS Resonance analysis:
-            !-----------------------------------
-            if (NBsystem_state_flag .EQ. 0 .and. Identify_NBody_endstate .EQ. 1 .and. n_particles .EQ. 3) then
-                
-                !IMS bin-sin config 'now'(1) yes/no:
-                IMSbin_1_yesno = IMSbin_yesno	!output from 'analyze_3body_state_info_sub' above.
-                
-                !IF IMS binary is created (label 1):	
-                if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
-                    !write info to file
-                    if (IC_code_version .EQ. 1) then
-                        write(16,*) 1, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
-                    endif	!code version 1
-                    !reset peri-center counter and dist array:
-                    IMS_rp_counter		= 0
-                    dist_ij_3tarr(:)	= 0.0
-                    !counter:
-                    IMS_binsin_counter	= IMS_binsin_counter+1
-                endif
-                
-                !IF IMS binary is destroyed (label 0):
-                if (IMSbin_1_yesno .EQ. 0 .and. IMSbin_0_yesno .EQ. 1) then
-                    !write info to file
-                    if (IC_code_version .EQ. 1) then
-                        write(16,*) 0, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
-                    endif	!code version 1				
-                    !reset peri-center counter and dist array:
-                    IMS_rp_counter		= 0
-                    dist_ij_3tarr(:)	= 0.0 
-                    !counter:
-                    !IMS_binsin_counter = IMS_binsin_counter+1
-                endif
-
-                !Count peri-center passages if we are in IMS state:
-                if (IMSbin_0_yesno .EQ. 1 .and. IMSbin_1_yesno .EQ. 1) then
-                    dist_ij				= Return_3body_Info_REAL_XTRAINFO(1)
-                    dist_ij_3tarr(1:2)	= dist_ij_3tarr(2:3)
-                    dist_ij_3tarr(3)	= dist_ij
-                    !check for peri-center passage:
-                    if (dist_ij_3tarr(1) .GT. dist_ij_3tarr(2) .and. dist_ij_3tarr(3) .GT. dist_ij_3tarr(2)) then
-                        IMS_rp_counter = IMS_rp_counter+1
-                    endif
-                endif 
-                
-                !save most recent initial (MRini) IMS (a,e):
-                if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
-                    MRini_IMS_a	= Return_3body_Info_REAL(4)
-                    MRini_IMS_e	= Return_3body_Info_REAL(5)
-                endif			
-                            
-                !Update IMS 'before'(0):
-                IMSbin_0_yesno = IMSbin_1_yesno
-                
-            endif	
-            !-----------------------------------
-            !Track rmin between 12,13,23:
-            !-----------------------------------
-            !Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
-            r_12 = Return_3body_Info_REAL_XTRAINFO(2)
-            r_13 = Return_3body_Info_REAL_XTRAINFO(3)
-            r_23 = Return_3body_Info_REAL_XTRAINFO(4)
-            if (r_12 .LT. rmin_12)	rmin_12 = r_12
-            if (r_13 .LT. rmin_13)	rmin_13 = r_13
-            if (r_23 .LT. rmin_23)	rmin_23 = r_23
-            !-----------------------------------
-            !----------------------------------------------------
-
-            !----------------------------------------------------
-            !Extra info for detailed analysis:
-            !----------------------------------------------------
-            if (IC_code_version .EQ. 1) then
-            if (outputinfo_screenfiles .EQ. 1)	CALL TEST_sub(Y,TOUT)
-            endif	!code version 1					
-            !----------------------------------------------------
-        endif
+		!-----------------------------------
+		!user states:
+		!-----------------------------------
+		!USER STATE: 20 EXAMPLE! YOU CAN ADD MODE USR STATES!!
+		if (flag_usrstate20 .EQ. 0 .and. bound_bin_ij .EQ. 1 .and.	(a_bin_ij/tidradius_total_bin_ij)		.LT. 3.0) then
+			!SELECT output info:
+			output_userstate_info_INT(1:5) = [20, bin_i, bin_j, IMS_rp_counter, IMS_binsin_counter]	!'IMS_rp_counter, IMS_binsin_counter' are only active if we have 3 objs.
+			!SAVE to file (code version 1):
+			if (IC_code_version .EQ. 1) then
+				write(17,*) output_userstate_info_INT	!write INT info
+				write(17,*) output_userstate_info_REAL	!write REAL info
+				print*, 'usrstate20'
+			endif	!code version 1
+			!SAVE in arrays (code version 2):
+			if (IC_code_version .EQ. 2) then
+				out_usrstate_INT(nrc_usrstate,:)	= output_userstate_info_INT(:)
+				out_usrstate_REAL(nrc_usrstate,:)	= output_userstate_info_REAL(:)
+				nrc_usrstate						= nrc_usrstate + 1
+			endif	!code version 2
+			!FLAG usrstate:
+			flag_usrstate20 = 1
+		endif		
+		!-----------------------------------
+		!----------------------------------------------------
 	
+		!----------------------------------------------------
+		!3-body section:
+		!----------------------------------------------------	
+		!-----------------------------------
+		!Get Info: 3Body state [[i,j],k]
+		!-----------------------------------
+		if (Identify_3Body_endstate .EQ. 1) then
+			CALL analyze_3body_state_info_sub(Y, Return_3body_Info_REAL, Return_3body_Info_INT, Return_3body_Info_REAL_XTRAINFO)
+			!Output format:
+			!Return_3body_Info_REAL(1:10)			= [1 E_kin(ij), 2 E_pot(ij), 3 E_tot(ij), 4 a_bin(ij), 5 e_bin(ij), 6 E_kin(ijk), 7 E_pot(ijk), 8 E_tot(ijk), 9 a_bin(ijk), 10 e_bin(ijk)]
+			!Return_3body_Info_INT(1:5)				= [out_end_state_flag, out_bin_i, out_bin_j, out_sin_k, out_IMS_bin_yesno]
+			!Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
+			NBsystem_state_flag = Return_3body_Info_INT(1)				! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
+			IMSbin_yesno		= Return_3body_Info_INT(5)				! if IMS yes = 1, otherwise 0.
+		endif	
+		!-----------------------------------
+		!3-Body IMS Resonance analysis:
+		!-----------------------------------
+		if (NBsystem_state_flag .EQ. 0 .and. Identify_3Body_endstate .EQ. 1) then
+			
+			!IMS bin-sin config 'now'(1) yes/no:
+			IMSbin_1_yesno = IMSbin_yesno	!output from 'analyze_3body_state_info_sub' above.
+			
+			!IF IMS binary is created (label 1):	
+			if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
+				!write info to file
+				if (IC_code_version .EQ. 1) then
+					write(16,*) 1, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
+				endif	!code version 1
+				!reset peri-center counter and dist array:
+				IMS_rp_counter		= 0
+				dist_ij_3tarr(:)	= 0.0
+				!counter:
+				IMS_binsin_counter	= IMS_binsin_counter+1
+			endif
+			
+			!IF IMS binary is destroyed (label 0):
+			if (IMSbin_1_yesno .EQ. 0 .and. IMSbin_0_yesno .EQ. 1) then
+				!write info to file
+				if (IC_code_version .EQ. 1) then
+					write(16,*) 0, Return_3body_Info_INT(2:4), Return_3body_Info_REAL(3:5), Return_3body_Info_REAL(8:10)
+				endif	!code version 1				
+				!reset peri-center counter and dist array:
+				IMS_rp_counter		= 0
+				dist_ij_3tarr(:)	= 0.0 
+				!counter:
+				!IMS_binsin_counter = IMS_binsin_counter+1
+			endif
 
+			!Count peri-center passages if we are in IMS state:
+			if (IMSbin_0_yesno .EQ. 1 .and. IMSbin_1_yesno .EQ. 1) then
+				dist_ij				= Return_3body_Info_REAL_XTRAINFO(1)
+				dist_ij_3tarr(1:2)	= dist_ij_3tarr(2:3)
+				dist_ij_3tarr(3)	= dist_ij
+				!check for peri-center passage:
+				if (dist_ij_3tarr(1) .GT. dist_ij_3tarr(2) .and. dist_ij_3tarr(3) .GT. dist_ij_3tarr(2)) IMS_rp_counter = IMS_rp_counter+1				
+			endif 
+			
+			!save most recent initial (MRini) IMS (a,e):
+			if (IMSbin_1_yesno .EQ. 1 .and. IMSbin_0_yesno .EQ. 0) then
+				MRini_IMS_a	= Return_3body_Info_REAL(4)
+				MRini_IMS_e	= Return_3body_Info_REAL(5)
+			endif			
+						
+			!Update IMS 'before'(0):
+			IMSbin_0_yesno = IMSbin_1_yesno
+			
+		endif	
+		!-----------------------------------
+		!Track rmin between 12,13,23:
+		!-----------------------------------
+		!Return_3body_Info_REAL_XTRAINFO(1:10)	= [out_dist_bin_ij, out_dist_bin_12, out_dist_bin_13, out_dist_bin_23, out_pos_CMij_wrt_sink(:), out_vel_CMij_wrt_sink(:)]			
+		r_12 = Return_3body_Info_REAL_XTRAINFO(2)
+		r_13 = Return_3body_Info_REAL_XTRAINFO(3)
+		r_23 = Return_3body_Info_REAL_XTRAINFO(4)
+		if (r_12 .LT. rmin_12)	rmin_12 = r_12
+		if (r_13 .LT. rmin_13)	rmin_13 = r_13
+		if (r_23 .LT. rmin_23)	rmin_23 = r_23
+		!-----------------------------------
+		!----------------------------------------------------
+	
+		!----------------------------------------------------
+		!Extra info for detailed analysis:
+		!----------------------------------------------------
+		if (IC_code_version .EQ. 1) then
+		if (outputinfo_screenfiles .EQ. 1)	CALL TEST_sub(Y,TOUT)
+		endif	!code version 1					
+		!----------------------------------------------------
+	
 		!----------------------------------------------------
 		!Check: Time/step limits, DLSODE status:
 		!----------------------------------------------------	
@@ -2607,8 +2427,8 @@ CONTAINS
 	if (outputinfo_screenfiles .EQ. 1) then
 		print*, endsim_end_state_flag
         if (endsim_end_state_flag .EQ. 2 .OR. endsim_end_state_flag .EQ. 3)    then
-            print*, NBsystem_bin_i, NBsystem_bin_j, Return_Nbody_coll_binparams(1), Return_Nbody_coll_binparams(2)
-            print*, Return_Nbody_coll_binparams(3), Return_Nbody_coll_binparams(4)
+            print*, NBsystem_bin_i, NBsystem_bin_j, Return_endstate_binparams(1), Return_endstate_binparams(2)
+            print*, Return_endstate_binparams(3), Return_endstate_binparams(4)
         endif
 		!print*, endsim_Return_Info_arr_REAL    !!! TAKEN OUT BY MIKE !!!
 		!print*, endsim_Return_Info_arr_INT

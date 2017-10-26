@@ -36,6 +36,17 @@ gfortran module_Nbody_AffineTides_solver.f90 main_Nbody_AffineTides_solver.f90 -
 
 
 
+# MODULE INFORMATION
+SUBROUTINE Calc_binary_info(pos_1, vel_1, mass_1, pos_2, vel_2, mass_2, out_binary_info_arr):
+    Takes in positions, velocities, and masses of binary and returns:
+        out_binary_info_arr(:) = [E_kin, E_pot, E_tot, a_bin, e_bin]
+
+
+
+# Remove redspace in vim for fortran code:
+:hi link fortranTab NONE
+
+
 
 ---------------------------------------------------------------------------
 Libraries:

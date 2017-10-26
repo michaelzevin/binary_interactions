@@ -99,12 +99,17 @@ real*8, dimension(10)						:: out_xtra_2_info_REAL
 !--------------------------------------------------------
 !Standard settings:
 !--------------------------------------------------------
-IC_code_version		= 4         ! CHANGED FROM 1 to 4 BY MIKE FOR 4-BODY STUDY
+IC_code_version		= 1
 IC_simparams_INT	= 1
 IC_simparams_REAL	= 1
 dimlen_IC_nbody		= 1
 IC_nbody_const_posvel_qqdot_etc_arr	= 1
 !--------------------------------------------------------
+
+! !--------------------------------------------------------
+! !MIKE'S VERSION SETTINGS
+! !--------------------------------------------------------
+! IC_code_version     = 4
 
 ! !--------------------------------------------------------
 ! !TEST SETTINGS!!!!!!!!
