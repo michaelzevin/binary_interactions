@@ -105,6 +105,22 @@ CONTAINS
 
 
 	!----------------------------------------------------------------------------------------------------
+	FUNCTION Fthresh(m11, m12, m2, a1, e1, r_12)
+	!----------------------------------------------------------------------------------------------------
+		IMPLICIT NONE
+		real*8,                  intent(in)	:: m11, m12, m2, a1, e1, r_12
+		real*8               				:: Fthresh
+		!---------------------------------------
+		!calculate ratio between bounding force and tidal force from perturber
+        Fthresh = 2d0*(m11+m12)*m2*(a1*(1+e1))**3d0 / (m11*m12*r_12**(3d0))
+		!---------------------------------------	
+	RETURN
+	end function Fthresh
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
+
+
+	!----------------------------------------------------------------------------------------------------
 	FUNCTION func_det_3x3M(M)
 	!----------------------------------------------------------------------------------------------------
 		IMPLICIT NONE
@@ -808,7 +824,7 @@ CONTAINS
 		real*8, dimension(3)									:: PA_a1a2a3
 		real*8													:: max_a1a2a3
         real*8                                                  :: KE, PE, eps, Mtot, M_in, v_dir
-        real*8                                                  :: KE1, KE2, M1, M2, v_dir1, v_dir2
+        real*8                                                  :: KE1, KE2, M1, M2
 		real*8, dimension(3)									:: r_CM, v_CM, CM, CM_num, vCM_num
 		real*8, dimension(3)									:: CM1, CM2, vCM1, vCM2
 		real*8, dimension(3)									:: CM_pos, CM_vel, Lin_vec, Lout_vec, Lvec
@@ -817,7 +833,7 @@ CONTAINS
         real*8                                                  :: a_bin, e_bin, a_bin_out, e_bin_out, inc_bin
         real*8                                                  :: a_in, e_in, a_out, e_out, inc
         real*8                                                  :: E_kin, E_pot, E_tot, E_check, L_check, L_ini, E_ini
-        real*8                                                  :: term1, term2, Fthresh, delta_F, delta_EL
+        real*8                                                  :: term1, term2, Ft, delta_F, delta_EL
         integer                                                 :: unbound, ub1, ub2
 		
 		!------------------------------------------------------------
@@ -925,10 +941,10 @@ CONTAINS
             KE = binary_info_arr_ij(1)
             PE = binary_info_arr_ij(2)
 
-            r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
-            v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
+            !r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
+            v_dir = dot_product(vel(i,:), CM_vel)   ! if positive, systems are moving away from each other
 
-            if (KE .GT. PE .AND. v_dir .GT. 0d0) then
+            if (KE .GT. PE .AND. v_dir .LT. 0d0) then
                 unbound = unbound + 1
                 ub1 = i   ! NOTE: this is keeping track of the unbound particle
             endif
@@ -972,10 +988,10 @@ CONTAINS
                 ! Threshold that Ftid/Frel < delta = 1e-5
                 CM_pos = CoM_3body(pos(i,:), mass(i), pos(j,:), mass(j), pos(k,:), mass(k))
                 r_ij  = len3vec(CM_pos-pos(ub1,:))
-                Fthresh = 2d0*(M_in+mass(k))*mass(ub1)*(a_out*(1+e_out))**3d0 / (M_in*mass(k)*r_ij**(3d0))
+                Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
 
                 ! check if stable triple criteria is met, and write output variables
-                if (term1 .GT. term2 .AND. Fthresh .LT. delta_F) then
+                if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
                     end_state_flag = 3			!STABLE TRIPLE STATE STATE	
                     out_bin_i 			= i
                     out_bin_j 			= j
@@ -1019,10 +1035,10 @@ CONTAINS
             KE = binary_info_arr_ij(1)
             PE = binary_info_arr_ij(2)
 
-            r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
-            v_dir = dot_product(vel(i,:), r_CM)   ! if positive, particle is moving away from the CM
+            !r_CM = pos(i,:) - CM_pos          ! pointing from the center of mass to the particle
+            v_dir = dot_product(vel(i,:), CM_vel)   ! if positive, systems are moving away from each other
 
-            if (KE .GT. PE .AND. v_dir .GT. 0d0) then
+            if (KE .GT. PE .AND. v_dir .LT. 0d0) then
                 unbound = unbound + 1
                 
                 if (unbound .EQ. 1)           ub1 = i   ! NOTE: this is keeping track of the two unbound particles
@@ -1058,15 +1074,18 @@ CONTAINS
         a_bin = binary_info_arr_ij(4)
         e_bin = binary_info_arr_ij(5)
 
-        ! first unbound object
-        r_ij  = len3vec(CM_pos-pos(ub1,:))
-        Fthresh = 2d0*(Mtot)*mass(ub1)*(a_bin*(1+e_bin))**3d0 / (mass(out_bin_i)*mass(out_bin_j)*r_ij**(3d0))
-        if (Fthresh .LT. delta_F) then
-            ! second unbound object
-            r_ij  = len3vec(CM_pos-pos(ub2,:))
-            Fthresh = 2d0*(Mtot)*mass(ub2)*(a_bin*(1+e_bin))**3d0 / (mass(out_bin_i)*mass(out_bin_j)*r_ij**(3d0))
-            if (Fthresh .LT. delta_F) then
-!                end_state_flag = 4  !>(N-2) systems are unbound        #FIXME
+        ! first, make sure the system is actually bound (PE > KE)
+        if (binary_info_arr_ij(1) .LT. binary_info_arr_ij(2)) then
+            ! first unbound object
+            r_ij  = len3vec(CM_pos-pos(ub1,:))
+            Ft = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub1),a_bin,e_bin,r_ij)
+            if (Ft .LT. delta_F) then
+                ! second unbound object
+                r_ij  = len3vec(CM_pos-pos(ub2,:))
+                Ft = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub2),a_bin,e_bin,r_ij)
+                if (Ft .LT. delta_F) then
+                    end_state_flag = 4  !>(N-2) systems are unbound        #FIXME
+                endif
             endif
         endif
         
@@ -1103,81 +1122,73 @@ CONTAINS
 
 
 		!------------------------------------------------------------
-		!Check for 2 unbound binary systems moving away from each other (endstate=6)
+		!Check for 2 unbound binary systems moving away from each other (endstate=6)   #FIXME needs checks
 		!------------------------------------------------------------
-!		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
-!        unbound = 0
-!        CM_num(:) = 0.0
-!        Mtot = 0.0
-!        CM(:) = 0.0
-!        do i=1, n_particles,1
-!            CM_num(:) = CM_num(:) + mass(i)*pos(i,:)
-!            Mtot = Mtot + mass(i)
-!        enddo
-!        CM(:) = CM_num(:) / Mtot
-!
-!        do i=1, n_particles,1       ! loop over all particles pairs
-!            do j=1, n_particles,1
-!            if (i .NE. j) then
-!                CM1 = (mass(i)*pos(i,:) + mass(j)*pos(j,:)) / (mass(i)+mass(j))
-!                vCM1 = (mass(i)*vel(i,:) + mass(j)*vel(j,:)) / (mass(i)+mass(j))
-!                M1 = mass(i)+mass(j)
-!                ! now construct the second binary
-!                M2 = 0.0
-!                CM_num = 0.0
-!                vCM_num = 0.0
-!                do k=1, n_particles,1
-!                    if (k .NE. i .AND. k .NE. j) then
-!                        M2 = M2 + mass(k)
-!                        CM_num = CM_num + mass(k)*pos(k,:)
-!                        vCM_num = vCM_num + mass(k)*vel(k,:)
-!                    endif
-!                    CM2 = CM_num / M2
-!                    vCM2 = vCM_num / M2
-!                enddo
-!                r_CM = CM1 - CM          ! pointing from the center of mass to the particle
-!                v_dir1 = dot_product(vCM1(:), r_CM)   ! if positive, particle is moving away from the CM
-!                r_CM = CM2 - CM
-!                v_dir2 = dot_product(vCM2(:), r_CM)
-!                KE1 = (1d0/2d0)*M1*len3vec(vCM1(:))**(2d0)
-!                KE2 = (1d0/2d0)*M2*len3vec(vCM2(:))**(2d0)
-!                r_12 = len3vec(CM1-CM2)
-!                PE = M1*M2 / r_12
-!                eps = (1d0/10d0)                ! set minimum PE threshold
-!                ! now check that the partners are actually bound...
-!                r_ij = len3vec(pos(i,:)-pos(j,:))
-!                do k=1, n_particles,1
-!                    if (k .NE. i .AND. k .NE. j) then
-!                    do l=1, n_particles,1
-!                        if (l .NE. k .AND. l .NE. j .AND. l .NE. i) then
-!                            r_kl = len3vec(pos(k,:)-pos(l,:))
-!                            ! if the 'force' variable is positive, it means it is more attracted to its companion
-!                            fi = mass(i)*mass(j)/(r_ij**(2d0)) - mass(i)*M2/(len3vec(pos(i,:)-CM2)**(2d0))
-!                            fj = mass(i)*mass(j)/(r_ij**(2d0)) - mass(j)*M2/(len3vec(pos(j,:)-CM2)**(2d0))
-!                            fk = mass(k)*mass(l)/(r_kl**(2d0)) - mass(k)*M1/(len3vec(pos(k,:)-CM1)**(2d0))
-!                            fl = mass(k)*mass(l)/(r_kl**(2d0)) - mass(l)*M1/(len3vec(pos(l,:)-CM1)**(2d0))
-!                        endif
-!                        unbound = 0
-!                        if (fi .LT. 0 .OR. fj .LT. 0 .OR. fk .LT. 0 .OR. fl .LT. 0) then
-!                            unbound = 1
-!                        endif
-!                        if (KE1 .GT. PE .AND. KE2 .GT. PE .AND. PE .LT. eps .AND. &
-!                                        v_dir1 .GT. 0d0 .AND. v_dir2 .GT. 0d0 .AND. unbound .EQ. 0) then
-!                            end_state_flag = 4  ! two unbound binaries moving away from each other
-!                        endif
-!                    enddo !loop over l
-!                    endif
-!                enddo !loop over k
-!            endif
-!            enddo   !loop over j
-!        enddo   !loop over i
-!        !-----------------------------------
-!        !if endstate is found
-!        !-----------------------------------
-!        if (end_state_flag .NE. 0) then
-!            out_end_state_flag = end_state_flag
-!        endif
-!        ENDIF !endstate
+		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
+
+        do i=1, n_particles,1
+        do j=i+1, n_particles,1
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij) ! system [i,j]
+            ! see if PE is greater than KE
+            if (binary_info_arr_ij(1) .LT. binary_info_arr_ij(2)) then
+                a_bin = binary_info_arr_ij(4)
+                e_bin = binary_info_arr_ij(5)
+                do k=1, n_particles,1
+                do l=k+1, n_particles,1
+                if (k .NE. i .AND. k .NE. j .AND. l .NE. i .AND. l .NE. j) then
+                    CALL    Calc_binary_info(pos(k,:), vel(k,:), mass(k), pos(l,:), vel(l,:), mass(l), binary_info_arr_ij) ! system [i,j]
+                    ! see if PE is greater than KE
+                    if (binary_info_arr_ij(1) .LT. binary_info_arr_ij(2)) then
+                        a_bin_out = binary_info_arr_ij(4)
+                        e_bin_out = binary_info_arr_ij(5)
+                        
+
+                        ! now, we see if the two systems are unbound, and if they are below the tidal threshold
+                        CM1 = CoM_2body(pos(i,:), mass(i), pos(j,:), mass(j))
+                        vCM1 = CoM_2body(vel(i,:), mass(i), vel(j,:), mass(j))
+                        M1 = mass(i)+mass(j)
+                        CM2 = CoM_2body(pos(k,:), mass(k), pos(l,:), mass(l))
+                        vCM2 = CoM_2body(vel(k,:), mass(k), vel(l,:), mass(l))
+                        M2 = mass(k)+mass(l)
+
+                        ! see if KE is greater than PE for the two bound systems, and that they're moving away from one another
+                        CALL    Calc_binary_info(CM1, vCM1, M1, CM2, vCM2, M2, binary_info_arr_ij)
+                        v_dir = dot_product(vCM1, vCM2)   ! if positive, particles are moving in same direction
+                        if (binary_info_arr_ij(1) .GT. binary_info_arr_ij(2) .AND. v_dir .LT. 0) then
+                            ! see if binary [i,j] is bound below tidal threshold
+                            r_ij = len3vec(CM1-CM2)
+                            Ft = Fthresh(mass(i),mass(j),M2,a_bin,e_bin,r_ij)
+                            if (Ft .LT. delta_F) then
+                                ! see if binary [k,l] is bound below tidal threshold    
+                                Ft = Fthresh(mass(k),mass(l),M1,a_bin_out,e_bin_out,r_ij)
+                                if (Ft .LT. delta_F) then
+                                    end_state_flag = 6  ! two bound systems unbound from one another!
+
+                                    ! set the indices of bound systems [i,j] and [k,l]
+                                    out_bin_i = i
+                                    mass_bin_i = mass(i)
+                                    out_bin_j = j
+                                    mass_bin_j = mass(j)
+                                    out_bin_k = k
+                                    mass_bin_k = mass(k)
+                                    out_bin_l = l
+                                    mass_bin_l = mass(l)
+                                endif
+                            endif
+                        endif    !inner loops
+
+
+                    endif   !outer loops
+                endif
+                enddo !loop over l
+                enddo !loop over k
+            endif
+        enddo !loop over j
+        enddo !loop over i
+                        
+
+        ENDIF !endstate
+
 
 
 		!------------------------------------------------------------
