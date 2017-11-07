@@ -1672,6 +1672,61 @@ CONTAINS
 	END SUBROUTINE TEST_sub
 	!----------------------------------------------------------------------------------------------------
 	!----------------------------------------------------------------------------------------------------
+
+
+
+	!----------------------------------------------------------------------------------------------------
+	SUBROUTINE  output_4body_sub(Y, time_t)
+	!----------------------------------------------------------------------------------------------------
+		IMPLICIT NONE
+		real*8, dimension(tot_nr_Y_evol_eqs), intent(in)		:: Y
+		real*8, intent(in)										:: time_t
+		real*8, dimension(n_particles,length_Y_per_body_n)		:: body_all_all
+		real*8, dimension(n_particles,3)						:: pos, vel
+		real*8, dimension(n_particles,3,3)						:: body_all_q, body_all_qdot
+        integer                                                 :: downsamp
+        real*8                                                  :: timesamp
+
+        !------------------------------------------------------------
+        !Set downsampling conditions
+        !------------------------------------------------------------
+        downsamp = 0   !this should be turned on (1) or off (0) depending on if you want to downsample
+        timesamp = max_sim_time/100d0    !this currently downsamples each output file 100 times
+		
+		!------------------------------------------------------------
+		!UNPACK Y:
+		!------------------------------------------------------------
+		body_all_all(:,:) 			= RESHAPE(Y, (/ n_particles,length_Y_per_body_n /), 	ORDER = (/2,1/))
+		pos(:,:)					= body_all_all(:,1:3)
+		vel(:,:)					= body_all_all(:,4:6)
+		body_all_q(:,:,:)			= RESHAPE(body_all_all(:,7:15),	(/ n_particles,3,3 /), 	ORDER = (/1,2,3/))
+		body_all_qdot(:,:,:)		= RESHAPE(body_all_all(:,16:24),(/ n_particles,3,3 /), 	ORDER = (/1,2,3/))
+		!------------------------------------------------------------
+
+		
+		!------------------------------------------------------------
+		!Write info to file:
+		!------------------------------------------------------------
+		!for 4 particle
+		if (n_particles .EQ. 4) then
+            if (downsamp .EQ. 0) then
+			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
+			    write(11,*) time_t
+            endif
+            if (downsamp .EQ. 1 .AND. time_t .GE. ds*timesamp) then
+			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
+			    write(11,*) time_t
+                ds = ds + 1
+		    endif
+        endif
+		!------------------------------------------------------------
+
+
+	END SUBROUTINE output_4body_sub
+	!----------------------------------------------------------------------------------------------------
+	!----------------------------------------------------------------------------------------------------
 	
 	
 	!----------------------------------------------------------------------------------------------------
@@ -2023,18 +2078,18 @@ CONTAINS
 	!---------------------------------------
 	if (IC_code_version .EQ. 1) then
 	!---------------------------------------
-	open (unit=10, file='NbodyTides_dataout_pos.dat',			status='REPLACE', action='write')
-	open (unit=11, file='NbodyTides_dataout_a1a2a3.dat',		status='REPLACE', action='write')
-	open (unit=12, file='NbodyTides_dataout_Eself.dat',			status='REPLACE', action='write')
-	open (unit=13, file='NbodyTides_dataout_Etot.dat',			status='REPLACE', action='write')
-	open (unit=14, file='NbodyTides_dataout_binij_info.dat',	status='REPLACE', action='write')
-	open (unit=15, file='NbodyTides_dataout_full_q.dat',		status='REPLACE', action='write')
-	open (unit=16, file='NbodyTides_dataout_resonance.dat',		status='REPLACE', action='write')
-	open (unit=17, file='NbodyTides_dataout_user_states.dat',	status='REPLACE', action='write')
-	open (unit=18, file='NbodyTides_dataout_vel.dat', 			status='REPLACE', action='write')
-	open (unit=20, file='Nbody_endsim_info_data.txt', 			status='REPLACE', action='write')
-	open (unit=21, file='NbodyTides_dataout_3bodybinsin.txt', 	status='REPLACE', action='write')
-    open (unit=22, file='Nbody_initial_conditions.txt',         status='REPLACE', action='write')
+	open (unit=10, file='Nbody_positions.dat',            			status='REPLACE', action='write')
+	!open (unit=11, file='NbodyTides_dataout_a1a2a3.dat',		status='REPLACE', action='write')
+	!open (unit=12, file='NbodyTides_dataout_Eself.dat',			status='REPLACE', action='write')
+	!open (unit=13, file='NbodyTides_dataout_Etot.dat',			status='REPLACE', action='write')
+	!open (unit=14, file='NbodyTides_dataout_binij_info.dat',	status='REPLACE', action='write')
+	!open (unit=15, file='NbodyTides_dataout_full_q.dat',		status='REPLACE', action='write')
+	!open (unit=16, file='NbodyTides_dataout_resonance.dat',		status='REPLACE', action='write')
+	!open (unit=17, file='NbodyTides_dataout_user_states.dat',	status='REPLACE', action='write')
+	open (unit=18, file='Nbody_velocities.dat',            			status='REPLACE', action='write')
+	open (unit=20, file='Nbody_endsim_info.dat',           			status='REPLACE', action='write')
+	!open (unit=21, file='NbodyTides_dataout_3bodybinsin.txt', 	status='REPLACE', action='write')
+    open (unit=22, file='Nbody_initial_conditions.dat',               status='REPLACE', action='write')
 	!‘REPLACE’ : If the file already exists then it is deleted and a new file created with the same
 	!name. If the file does not exist then a new file is created.
 	!---------------------------------------
@@ -2302,6 +2357,26 @@ CONTAINS
 		!----------------------------------------------------
 	
 		!----------------------------------------------------
+		!N-body section:
+		!----------------------------------------------------
+		!-----------------------------------	
+		!Check for endstate:
+		!-----------------------------------
+		CALL Nbody_endstate_sub(Y, Return_Nbody_endstate, Return_endstate_binparams)            
+		NBsystem_state_flag = Return_Nbody_endstate(1)		! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
+
+        !-----------------------------------
+        !Write to data files
+        !-----------------------------------
+		if (IC_code_version .EQ. 1) then
+		if (outputinfo_screenfiles .EQ. 1)	CALL output_4body_sub(Y,TOUT)
+		endif	!code version 1					
+
+
+
+
+!!!THIS SECTION IS NOT USED FOR THE bBBH 4-BODY STUDY!!!
+		!----------------------------------------------------
 		!Check for tidal threshold:
 		!----------------------------------------------------
 		!check if tidal threshold is passed (ONLY check if it has NOT been found so far!):
@@ -2317,22 +2392,7 @@ CONTAINS
 		endif
 		!----------------------------------------------------				
 				
-		!----------------------------------------------------
-		!N-body section:
-		!----------------------------------------------------
-		!-----------------------------------	
-		!Check for endstate:
-		!-----------------------------------
-		CALL Nbody_endstate_sub(Y, Return_Nbody_endstate, Return_endstate_binparams)
-            
-		NBsystem_state_flag = Return_Nbody_endstate(1)		! (.NE. 0 if endstate is found.) ( = 0 if no endstate.)
-        NBsystem_bin_i = Return_Nbody_endstate(2)       ! Added by Mike
-        NBsystem_bin_j = Return_Nbody_endstate(3)       ! Added by Mike
-
-
-
-
-
+		if (Identify_3Body_endstate .EQ. 1) then
 		!NOTE: if we also use 3body-part then NBsystem_state_flag from here will be overwritten in 3body-part.
 		!-----------------------------------
 		!Get Info about most-bound-pair [i,j]
@@ -2380,6 +2440,7 @@ CONTAINS
 		endif		
 		!-----------------------------------
 		!----------------------------------------------------
+        endif
 	
 		!----------------------------------------------------
 		!3-body section:
@@ -2448,7 +2509,6 @@ CONTAINS
 			!Update IMS 'before'(0):
 			IMSbin_0_yesno = IMSbin_1_yesno
 			
-		endif	
 		!-----------------------------------
 		!Track rmin between 12,13,23:
 		!-----------------------------------
@@ -2462,10 +2522,6 @@ CONTAINS
 		!-----------------------------------
 		!----------------------------------------------------
 	
-
-
-
-
 		!----------------------------------------------------
 		!Extra info for detailed analysis:
 		!----------------------------------------------------
@@ -2473,6 +2529,12 @@ CONTAINS
 		if (outputinfo_screenfiles .EQ. 1)	CALL TEST_sub(Y,TOUT)
 		endif	!code version 1					
 		!----------------------------------------------------
+		endif	
+!!!THIS HAS BEEN REMOVED FOR THE bBBH 4-BODY STUDY!!!
+
+
+
+
 	
 		!----------------------------------------------------
 		!Check: Time/step limits, DLSODE status:
