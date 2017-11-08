@@ -12,7 +12,7 @@ integer, dimension(:), allocatable					:: evoTides_yesno, RigidSph_yesno
 real*8, dimension(3,3)								:: I_MAT
 real*8												:: PN_gamma = 2.12370597232e-06	!postnewtonian gamma - units: Rsun, Msun, ....
 integer												:: use_12PN, use_1PN, use_2PN, use_25PN, Identify_3Body_endstate, max_sim_nrsteps
-integer												:: outputinfo_screenfiles
+integer												:: outputinfo_screenfiles, downsample
 real*8												:: scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold
 real*8												:: max_simtime_sec, IMSbinsingle_threshold, tidaldisrup_threshold, insp_threshold
 integer												:: pass_tidalthreshold_yesno
@@ -1438,14 +1438,12 @@ CONTAINS
 		real*8, dimension(3)									:: CM_ij_pos, CM_ij_vel
 		real*8, dimension(5)									:: binary_info_arr_ij, binary_info_arr_ijk
 		real*8, dimension(3)									:: PA_a1a2a3
-        integer                                                 :: downsamp
         real*8                                                  :: timesamp
 
         !------------------------------------------------------------
         !Set downsampling conditions
         !------------------------------------------------------------
-        downsamp = 0   !this should be turned on (1) or off (0) depending on if you want to downsample
-        timesamp = max_sim_time/100d0    !this currently downsamples each output file 100 times
+        timesamp = INT(max_sim_time)/downsample    !this currently downsamples each output file 100 times
 		
 		!------------------------------------------------------------
 		!UNPACK Y:
@@ -1630,12 +1628,12 @@ CONTAINS
 		!------------------------------------------------------------
 		!for 4 particle
 		if (n_particles .EQ. 4) then
-            if (downsamp .EQ. 0) then
+            if (downsample .EQ. 0) then
 			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
 			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
             endif
-            if (downsamp .EQ. 1 .AND. time_t .GE. ds*timesamp) then
+            if (downsample .NE. 1 .AND. time_t .GE. ds*timesamp) then
 			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
 			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
@@ -1684,14 +1682,12 @@ CONTAINS
 		real*8, dimension(n_particles,length_Y_per_body_n)		:: body_all_all
 		real*8, dimension(n_particles,3)						:: pos, vel
 		real*8, dimension(n_particles,3,3)						:: body_all_q, body_all_qdot
-        integer                                                 :: downsamp
         real*8                                                  :: timesamp
 
         !------------------------------------------------------------
         !Set downsampling conditions
         !------------------------------------------------------------
-        downsamp = 0   !this should be turned on (1) or off (0) depending on if you want to downsample
-        timesamp = max_sim_time/100d0    !this currently downsamples each output file 100 times
+        if (downsample .NE. 0)      timesamp = INT(max_sim_time)/downsample
 		
 		!------------------------------------------------------------
 		!UNPACK Y:
@@ -1709,12 +1705,12 @@ CONTAINS
 		!------------------------------------------------------------
 		!for 4 particle
 		if (n_particles .EQ. 4) then
-            if (downsamp .EQ. 0) then
+            if (downsample .EQ. 0) then
 			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
 			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
             endif
-            if (downsamp .EQ. 1 .AND. time_t .GE. ds*timesamp) then
+            if (downsample .NE. 0 .AND. time_t .GE. ds*timesamp) then
 			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
 			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
@@ -2022,8 +2018,8 @@ CONTAINS
 	!real*8, dimension(:,:), allocatable					:: IC_par_pos, IC_par_vel
 	real*8, dimension(:,:,:), allocatable				:: IC_par_q, IC_par_qdot
 	real*8, dimension(:), allocatable					:: IC_Yevol_vec
-	integer, dimension(10)								:: Nbody_solver_params_1_INT
-	real*8, dimension(10)								:: Nbody_solver_params_2_REAL
+	integer, dimension(6)								:: Nbody_solver_params_1_INT
+	real*8, dimension(4)								:: Nbody_solver_params_2_REAL
 	real*8												:: t_start, t_now, t_simtime_sec_now 	!fortran time tester
 	integer												:: end_simulation
 	real*8												:: delta_t_evo
@@ -2079,7 +2075,7 @@ CONTAINS
 	if (IC_code_version .EQ. 1) then
 	!---------------------------------------
 	open (unit=10, file='Nbody_positions.dat',            			status='REPLACE', action='write')
-	!open (unit=11, file='NbodyTides_dataout_a1a2a3.dat',		status='REPLACE', action='write')
+	open (unit=11, file='Nbody_times.dat',                   		status='REPLACE', action='write')
 	!open (unit=12, file='NbodyTides_dataout_Eself.dat',			status='REPLACE', action='write')
 	!open (unit=13, file='NbodyTides_dataout_Etot.dat',			status='REPLACE', action='write')
 	!open (unit=14, file='NbodyTides_dataout_binij_info.dat',	status='REPLACE', action='write')
@@ -2116,7 +2112,7 @@ CONTAINS
 	allocate(IC_par_vel(n_particles,3))
 	allocate(IC_par_q(n_particles,3,3))
 	allocate(IC_par_qdot(n_particles,3,3))
-	allocate(IC_body_all_const_vec(n_particles,10))
+	allocate(IC_body_all_const_vec(n_particles,2))
 	allocate(mass(n_particles))
 	allocate(radius(n_particles))
 	allocate(gas_n(n_particles))
@@ -2136,70 +2132,12 @@ CONTAINS
 		!pos,vel:
 		read(*,*), IC_par_pos(i,:)				!pos
 		read(*,*), IC_par_vel(i,:)				!vel
-		!q:
-		read(*,*), IC_par_q(i,1,:)				!q(1,:)
-		read(*,*), IC_par_q(i,2,:)				!q(2,:)
-		read(*,*), IC_par_q(i,3,:)				!q(3,:)
-		!qdot:
-		read(*,*), IC_par_qdot(i,1,:)			!qdot(1,:)
-		read(*,*), IC_par_qdot(i,2,:)			!qdot(2,:)
-		read(*,*), IC_par_qdot(i,3,:)			!qdot(3,:)
         write(22,*) IC_body_all_const_vec(i,1:2), IC_par_pos(i,:), IC_par_vel(i,:) !write intiial conditions
 	enddo
 	!---------------------------------------
 	endif	!code version 1
 	!---------------------------------------
 	!---------------------------------------	
-	!---------------------------------------
-	!Code version 2:
-	!---------------------------------------
-	if (IC_code_version .EQ. 2) then
-	!---------------------------------------
-	!solver params:
-	Nbody_solver_params_1_INT(:)	= IC_simparams_INT(:)
-	Nbody_solver_params_2_REAL(:)	= IC_simparams_REAL(:)
-	!nr particles:
-	n_particles	= Nbody_solver_params_1_INT(7)
-	!calc:
-	tot_nr_Y_evol_eqs	= n_particles*length_Y_per_body_n
-	!Allocate:
-	allocate(IC_par_pos(n_particles,3))
-	allocate(IC_par_vel(n_particles,3))
-	allocate(IC_par_q(n_particles,3,3))
-	allocate(IC_par_qdot(n_particles,3,3))
-	allocate(IC_body_all_const_vec(n_particles,10))
-	allocate(mass(n_particles))
-	allocate(radius(n_particles))
-	allocate(gas_n(n_particles))
-	allocate(gas_gamma(n_particles))
-	allocate(Mqp_sph(n_particles))
-	allocate(evoTides_yesno(n_particles))
-	allocate(RigidSph_yesno(n_particles))
-	allocate(IC_Yevol_vec(tot_nr_Y_evol_eqs))
-	allocate(endsim_Y(tot_nr_Y_evol_eqs))
-	!Input ini pos, vel, mass, radius,.. for each body i:
-	do i=1, n_particles,1
-		index_par_i = (i-1)*9	!where 9 is the number of total horizontal info lines in the IC file per object.
-		!constants:
-		IC_body_all_const_vec(i,:)		= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+1,:) 			![Mass, Radi, gas_n, gas_gamma, Mqp, evoTides_yesno, RigidSph_yesno, 0,0,0]
-		!pos,vel:
-		IC_par_pos(i,:)					= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+2,1:3)		!pos
-		IC_par_vel(i,:)					= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+3,1:3)		!vel
-		!q:
-		IC_par_q(i,1,:)					= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+4,1:3)		!q(1,:)
-		IC_par_q(i,2,:)					= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+5,1:3)		!q(2,:)
-		IC_par_q(i,3,:)					= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+6,1:3)		!q(3,:)
-		!qdot:
-		IC_par_qdot(i,1,:)				= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+7,1:3)		!qdot(1,:)
-		IC_par_qdot(i,2,:)				= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+8,1:3)		!qdot(2,:)
-		IC_par_qdot(i,3,:)				= IC_nbody_const_posvel_qqdot_etc_arr(index_par_i+9,1:3)		!qdot(3,:)
-	enddo
-	!---------------------------------------
-	endif	!code version 2
-	!---------------------------------------
-	!---------------------------------------
-	!--------------------------------------------------------
-	!--------------------------------------------------------
 
 	
 	!--------------------------------------------------------
@@ -2212,25 +2150,16 @@ CONTAINS
 	use_2PN 					  	= Nbody_solver_params_1_INT(2)
     use_25PN                        = Nbody_solver_params_1_INT(3)
 	outputinfo_screenfiles			= Nbody_solver_params_1_INT(4)
-	Identify_3Body_endstate 		= Nbody_solver_params_1_INT(5)
+	downsample               		= Nbody_solver_params_1_INT(5)
 	max_sim_nrsteps					= Nbody_solver_params_1_INT(6)
 	!from Nbody_solver_params_2_REAL:
 	scale_dt						= Nbody_solver_params_2_REAL(1)
 	max_sim_time					= Nbody_solver_params_2_REAL(2)
 	max_simtime_sec					= Nbody_solver_params_2_REAL(3)
 	insp_threshold					= Nbody_solver_params_2_REAL(4)
-	evolvetides_threshold			= Nbody_solver_params_2_REAL(5)
-	ENDbinsingle_threshold			= Nbody_solver_params_2_REAL(6)
-	IMSbinsingle_threshold			= Nbody_solver_params_2_REAL(7)
-	tidaldisrup_threshold			= Nbody_solver_params_2_REAL(8)
 	!from IC_body_all_const_vec:
 	mass(:)							= IC_body_all_const_vec(:,1)
 	radius(:)						= IC_body_all_const_vec(:,2)
-	RigidSph_yesno(:)				= INT(IC_body_all_const_vec(:,3))
-	evoTides_yesno(:)				= INT(IC_body_all_const_vec(:,4))
-	gas_n(:)						= IC_body_all_const_vec(:,5)
-	gas_gamma(:)					= IC_body_all_const_vec(:,6)
-	Mqp_sph(:)						= IC_body_all_const_vec(:,7)
 	!Identity matrix:
 	I_MAT(:,:) = 0d0
 	I_MAT(1,1) = 1d0
@@ -2602,19 +2531,16 @@ CONTAINS
 	!---------------------------------------
 	!write endstate info to file:
 	write(20,*) endsim_end_state_flag
-	write(20,*) endsim_Return_Info_arr_INT
-	write(20,*) endsim_Return_Info_arr_REAL
+    write(20,*) Return_Nbody_endstate(2:5)
+    write(20,*) Return_endstate_binparams(1:4)
+    write(20,*) Return_endstate_binparams(5:9)
+!	write(20,*) endsim_Return_Info_arr_INT
+!	write(20,*) endsim_Return_Info_arr_REAL
 	!Print info to screen:
 	print*, 'Time = seconds:	', t_now-t_start
 	if (outputinfo_screenfiles .EQ. 1) then
 		print*, endsim_end_state_flag
-        if (endsim_end_state_flag .EQ. 2 .OR. endsim_end_state_flag .EQ. 3)    then
-            print*, NBsystem_bin_i, NBsystem_bin_j, Return_endstate_binparams(1), Return_endstate_binparams(2)
-            print*, Return_endstate_binparams(3), Return_endstate_binparams(4)
-        endif
-		!print*, endsim_Return_Info_arr_REAL    !!! TAKEN OUT BY MIKE !!!
-		!print*, endsim_Return_Info_arr_INT
-		!print*, endsim_TOUT
+        print*, Return_endstate_binparams(:)
 		print*, mass(1), radius(1), endsim_Y(1:6)
         print*, mass(2), radius(2), endsim_Y(25:30)
         if (n_particles .GT. 2)             print*, mass(3), radius(3), endsim_Y(49:54)
