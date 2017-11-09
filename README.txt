@@ -65,6 +65,7 @@ gfortran -fPIC -c opkda1.f opkda2.f opkdmain.f
 gfortran -fPIC -shared -o libs_odepackdp_JS.so opkda1.o opkda2.o opkdmain.o
 You now have libs_odepackdp_JS.so (or whatever name you choose).
 I don't know if its necessary to copy this lib .so to the folder where the main code is.
+May need to add path to .so file: LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/projects/b1011/mzevin/binary_interactions/main_files/
 ---------------------------------------------------------------------------
 ---------------------------------------------------------------------------
 LAPACK - used for lin alg operations. We use it for calc matrix eigen vecs, vals, inverse, etc.
