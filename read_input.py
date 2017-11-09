@@ -46,7 +46,7 @@ def CoM(m,x):
 def x_rot(v, theta):
     rot = np.asarray([[1,0,0],[0,np.cos(theta),-np.sin(theta)],[0,np.sin(theta),np.cos(theta)]])
     return np.dot(rot,v)
-def y_rot(v, theta): 
+def y_rot(v, theta):
     rot = np.asarray([[np.cos(theta),0,np.sin(theta)],[0,1,0],[-np.sin(theta),0,np.cos(theta)]])
     return np.dot(rot,v)
 def z_rot(v, theta):
@@ -75,12 +75,12 @@ def phase(phi, ecc):
     f = 2 * np.arctan(np.sqrt((1+ecc)/(1-ecc)) * np.tan(root/2))
     if f>=0:
         return f
-    else: 
+    else:
         return f+2*np.pi
 def b_from_bmax(b):
     # sample b uniformly in pi*b_max**2
-    return b*np.sqrt((np.random.random()))    
-    
+    return b*np.sqrt((np.random.random()))
+
 # directory-generating function
 def mkdir_p(path):
     try:
@@ -128,7 +128,7 @@ def write_input(b,PN,screen_out,steps,r_min,downsample):
 ### Argument handling ###
 
 argp = argparse.ArgumentParser()
-argp.add_argument("-f", "--path", type=str, help="Specify the path to the grid of data.")
+argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
 argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
@@ -144,8 +144,8 @@ n_part = args.n_particles
 
 
 # save Carl's data into a dataframe
-data=pd.read_csv(args.path, sep=' ', index_col=None)
-for key in data: 
+data=pd.read_csv(args.file, sep=' ', index_col=None)
+for key in data:
     data.rename(index=str, columns={key: key[(key.index(':')+1):]}, inplace=True)
 
 # get impact parameter in R_sun
@@ -178,7 +178,7 @@ if args.fixed_b:
     b = binary['b']
 else:
     b = b_from_bmax(binary['b'])
-    
+
 # grab our random values
 theta1, theta2 = theta_mc(), theta_mc()
 phi_p1, phi_p2 = phi_mc(), phi_mc()
@@ -204,7 +204,7 @@ v11 = np.asarray([0,0,0])
 v12 = np.asarray([-v_r(a1,e1,M1,f1)*np.cos(f1) - v_phi(a1,e1,M1,r1_mag)*np.sin(f1), \
       -v_r(a1,e1,M1,f1)*np.sin(f1) + v_phi(a1,e1,M1,r1_mag)*np.cos(f1), 0])
 
-# get things in the center of mass of first binary 
+# get things in the center of mass of first binary
 x1_CoM = [CoM([m11,m12],[x11[0],x12[0]]),CoM([m11,m12],[x11[1],x12[1]]),CoM([m11,m12],[x11[2],x12[2]])]
 x11_mag = r_i(r1_mag,m11,M1) # for checking against the norm of x11
 x12_mag = r_i(r1_mag,m12,M1) # for checking against the norm of x12
@@ -215,7 +215,7 @@ v11_mag = np.sqrt((2./r1_mag - 1./a1)/M1)*(M1-m11) # for checking against the no
 v12_mag = np.sqrt((2./r1_mag - 1./a1)/M1)*(M1-m12) # for checking against the norm of v12
 v11 = v11 - v1_CoM
 v12 = v12 - v1_CoM
-        
+
 # rotate binary to randomize periapse angle, inclination, and ascending node
 # rotate about angle of periapse (z-rot):
 x11, x12 = z_rot(x11, phi_p1), z_rot(x12, phi_p1)
@@ -242,7 +242,7 @@ v21 = np.asarray([0,0,0])
 v22 = np.asarray([-v_r(a2,e2,M2,f2)*np.cos(f2) - v_phi(a2,e2,M2,r2_mag)*np.sin(f2), \
       -v_r(a2,e2,M2,f2)*np.sin(f2) + v_phi(a2,e2,M2,r2_mag)*np.cos(f2), 0])
 
-# get things in the center of mass of first binary 
+# get things in the center of mass of first binary
 x2_CoM = [CoM([m21,m22],[x21[0],x22[0]]),CoM([m21,m22],[x21[1],x22[1]]),CoM([m21,m22],[x21[2],x22[2]])]
 x21_mag = r_i(r2_mag,m21,M2) # for checking against the norm of x11
 x22_mag = r_i(r2_mag,m22,M2) # for checking against the norm of x12
