@@ -92,14 +92,14 @@ def mkdir_p(path):
             raise
 
 # main input file writing function
-def write_input(b,PN,screen_out,steps,r_min,downsample):
+def write_input(b,PN,grid,screen_out,steps,r_min,downsample):
     if PN=='0':
         PN1, PN2, PN25 = 0, 0, 0
     elif PN=='25':
         PN1, PN2, PN25 = 0, 0, 1
     elif PN=='1225':
         PN1, PN2, PN25 = 1, 1, 1
-    f = open('binary.txt', 'w')
+    f = open('binary_%s.txt' % grid, 'w')
     f.write('%i\n\
 %i %i %i %i %i %i\n\
 0.01 %.2f 3600.0 10.0\n\
@@ -131,6 +131,7 @@ argp = argparse.ArgumentParser()
 argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
 argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
+argp.add_argument("-g", "--grid", type=str, help="Grid that is being used")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=1000000, help="Number of orbits to integrate for. Default=1e6.")
 argp.add_argument("--steps", type=int, default=1000000000, help="Number of simulation steps to integrate for. Default=1e9.")
@@ -305,5 +306,5 @@ T = (period(a1,M1)+period(a2,M2))/2.
 binary_input={'n':n_part, 'tau':args.orbits*T, 'm11':m11, 'x11':x11, 'v11':v11, 'm12':m12, 'x12':x12, 'v12':v12, \
     'm21':m21, 'x21':x21, 'v21':v21, 'm22':m22, 'x22':x22, 'v22':v22}
 
-write_input(binary_input, PN=args.pn, screen_out=args.screen_out, steps=args.steps, r_min=args.r_min, downsample=args.downsample)
+write_input(binary_input, PN=args.pn, grid=args.grid, screen_out=args.screen_out, steps=args.steps, r_min=args.r_min, downsample=args.downsample)
 
