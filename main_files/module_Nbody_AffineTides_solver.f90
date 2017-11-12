@@ -918,8 +918,7 @@ CONTAINS
 		!loop over obj pairs:
 		!---------------------------------------
 		do i=1, n_particles,1
-		do j=1, n_particles,1
-		if (i .NE. j) then
+		do j=i+1, n_particles,1
 		IF (end_state_flag .EQ. 0) THEN		!if no end-state yet.
 			!-----------------------------------
 			!calc:
@@ -942,7 +941,6 @@ CONTAINS
 			endif
 			!-----------------------------------
 		ENDIF	!endstate
-		endif	!i NE j
 		enddo	!loop over j
 		enddo	!loop over i
 
@@ -957,7 +955,6 @@ CONTAINS
 
 		!Initialize check flag params:
         unbound = 0             ! counter for number of unbound objects
-		stability_crit_yesno	= 0
 
         !See how many objects in the system are unbound
 		do i=1, n_particles,1
@@ -968,6 +965,7 @@ CONTAINS
             j .NE. k .AND. j .NE. l .AND. k .NE. l .AND. &
             j .LT. k .AND. k .LT. l) then
 
+            !FIXME how are things unbound then bound again? does this make sense?
             !particle i against system jkl
             CM_pos = CoM_3body(pos(j,:), mass(j), pos(k,:), mass(k), pos(l,:), mass(l))
             CM_vel = CoM_3body(vel(j,:), mass(j), vel(k,:), mass(k), vel(l,:), mass(l))
@@ -994,6 +992,7 @@ CONTAINS
 
             if (Etot_ijkl .GT. 0 .AND. Etot_ij .GT. 0 .AND. Etot_ik .GT. 0 .AND. &
                                        Etot_il .GT. 0 .AND. v_dir .GT. 0) then
+            !if (Etot_ijkl .GT. 0 .AND. v_dir .GT. 0) then
                 unbound = unbound + 1
                 if (unbound .EQ. 1)   ub1 = i
                 if (unbound .EQ. 2)   ub2 = i
@@ -1124,11 +1123,11 @@ CONTAINS
             out_bin_i = ub1
             out_bin_j = ub2
             out_bin_k = ub3
-            out_bin_l = ub4
+            if (unbound .EQ. 4)   out_bin_l = ub4
             mass_bin_i = mass(ub1)
             mass_bin_j = mass(ub2)
             mass_bin_k = mass(ub3)
-            mass_bin_l = mass(ub4)
+            if (unbound .EQ. 4)   mass_bin_l = mass(ub4)
 
             end_state_flag = 7  !TOTAL IONIZATION
 

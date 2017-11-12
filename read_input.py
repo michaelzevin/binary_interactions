@@ -102,7 +102,7 @@ def write_input(b,PN,screen_out,steps,r_min,downsample):
     f = open('binary.txt', 'w')
     f.write('%i\n\
 %i %i %i %i %i %i\n\
-0.01 %.2f 3600.0 10.0\n\
+0.1 %.2f 3600.0 10.0\n\
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
@@ -137,7 +137,7 @@ argp.add_argument("--steps", type=int, default=1000000000, help="Number of simul
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
 argp.add_argument("--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")
-argp.add_argument("--screen_out", type=int, default=0, help="Determined whether info is printed to screen. Default=0. Options: 0 (no), 1 (yes).")
+argp.add_argument("--screen-out", type=int, default=0, help="Determined whether info is printed to screen. Default=0. Options: 0 (no), 1 (yes).")
 args = argp.parse_args()
 
 n_part = args.n_particles
