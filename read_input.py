@@ -92,17 +92,49 @@ def mkdir_p(path):
             raise
 
 # main input file writing function
-def write_input(b,PN,screen_out,steps,r_min,downsample):
-    if PN=='0':
-        PN1, PN2, PN25 = 0, 0, 0
-    elif PN=='25':
-        PN1, PN2, PN25 = 0, 0, 1
-    elif PN=='1225':
-        PN1, PN2, PN25 = 1, 1, 1
-    f = open('binary.txt', 'w')
-    f.write('%i\n\
+def write_input(b,PN,steps,r_min,downsample,screen_out,three_body):
+    if screen_out:
+        screen = 1
+    else:
+        screen = 0
+
+    if three_body:
+        if PN=='0':
+            PN1, PN2, PN25 = 0, 0, 0
+        elif PN=='25':
+            PN1, PN2, PN25 = 0, 0, 1
+        elif PN=='1225':
+            PN1, PN2, PN25 = 1, 1, 1
+        f = open('binary.txt', 'w')
+        f.write('3\n\
 %i %i %i %i %i %i\n\
-0.1 %.2f 3600.0 10.0\n\
+0.01 %.2f 3600.0 10.0\n\
+%.6f  %.6f\n\
+%.6f  %.6f  %.6f\n\
+%.6f  %.6f  %.6f\n\
+%.6f  %.6f\n\
+%.6f  %.6f  %.6f\n\
+%.6f  %.6f  %.6f\n\
+%.6f  %.6f\n\
+%.6f  %.6f  %.6f\n\
+%.6f  %.6f  %.6f'
+        % (PN1,PN2,PN25,screen,steps,downsample, b['tau'],\
+        b['m11'],r_min*M_to_R(b['m11']),b['x11'][0],b['x11'][1],b['x11'][2],b['v11'][0],b['v11'][1],b['v11'][2],\
+        b['m12'],r_min*M_to_R(b['m12']),b['x12'][0],b['x12'][1],b['x12'][2],b['v12'][0],b['v12'][1],b['v12'][2],\
+        b['m21'],r_min*M_to_R(b['m21']),b['x21'][0],0,0,0,0,0))
+        f.close()
+
+    else:
+        if PN=='0':
+            PN1, PN2, PN25 = 0, 0, 0
+        elif PN=='25':
+            PN1, PN2, PN25 = 0, 0, 1
+        elif PN=='1225':
+            PN1, PN2, PN25 = 1, 1, 1
+        f = open('binary.txt', 'w')
+        f.write('%i\n\
+%i %i %i %i %i %i\n\
+0.01 %.2f 3600.0 10.0\n\
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
@@ -115,13 +147,12 @@ def write_input(b,PN,screen_out,steps,r_min,downsample):
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f'\
-    % (b['n'], PN1,PN2,PN25,screen_out,steps,downsample, b['tau'],\
-    b['m11'],r_min*M_to_R(b['m11']),b['x11'][0],b['x11'][1],b['x11'][2],b['v11'][0],b['v11'][1],b['v11'][2],\
-    b['m12'],r_min*M_to_R(b['m12']),b['x12'][0],b['x12'][1],b['x12'][2],b['v12'][0],b['v12'][1],b['v12'][2],\
-    b['m21'],r_min*M_to_R(b['m21']),b['x21'][0],b['x21'][1],b['x21'][2],b['v21'][0],b['v21'][1],b['v21'][2],\
-    b['m22'],r_min*M_to_R(b['m22']),b['x22'][0],b['x22'][1],b['x22'][2],b['v22'][0],b['v22'][1],b['v22'][2]))
-    f.close()
-
+        % (b['n'], PN1,PN2,PN25,screen,steps,downsample, b['tau'],\
+        b['m11'],r_min*M_to_R(b['m11']),b['x11'][0],b['x11'][1],b['x11'][2],b['v11'][0],b['v11'][1],b['v11'][2],\
+        b['m12'],r_min*M_to_R(b['m12']),b['x12'][0],b['x12'][1],b['x12'][2],b['v12'][0],b['v12'][1],b['v12'][2],\
+        b['m21'],r_min*M_to_R(b['m21']),b['x21'][0],b['x21'][1],b['x21'][2],b['v21'][0],b['v21'][1],b['v21'][2],\
+        b['m22'],r_min*M_to_R(b['m22']),b['x22'][0],b['x22'][1],b['x22'][2],b['v22'][0],b['v22'][1],b['v22'][2]))
+        f.close()
 
 
 
@@ -133,11 +164,12 @@ argp.add_argument("-i", "--index", type=int, help="Index of the row in the data 
 argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=1000000, help="Number of orbits to integrate for. Default=1e6.")
-argp.add_argument("--steps", type=int, default=1000000000, help="Number of simulation steps to integrate for. Default=1e9.")
+argp.add_argument("--steps", type=int, default=100000000, help="Number of simulation steps to integrate for. Default=1e8.")
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
 argp.add_argument("--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")
-argp.add_argument("--screen-out", type=int, default=0, help="Determined whether info is printed to screen. Default=0. Options: 0 (no), 1 (yes).")
+argp.add_argument("--screen-out", action="store_true", help="Boolean to determined whether info is printed to screen. ")
+argp.add_argument("--three-body", action="store_true", help="Boolean flag for writing a 3-body input file rather than a 4-body")
 args = argp.parse_args()
 
 n_part = args.n_particles
@@ -305,5 +337,5 @@ T = (period(a1,M1)+period(a2,M2))/2.
 binary_input={'n':n_part, 'tau':args.orbits*T, 'm11':m11, 'x11':x11, 'v11':v11, 'm12':m12, 'x12':x12, 'v12':v12, \
     'm21':m21, 'x21':x21, 'v21':v21, 'm22':m22, 'x22':x22, 'v22':v22}
 
-write_input(binary_input, PN=args.pn, screen_out=args.screen_out, steps=args.steps, r_min=args.r_min, downsample=args.downsample)
+write_input(binary_input, PN=args.pn, steps=args.steps, r_min=args.r_min, downsample=args.downsample, screen_out=args.screen_out, three_body=args.three_body)
 

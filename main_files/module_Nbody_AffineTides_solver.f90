@@ -841,11 +841,11 @@ CONTAINS
         real*8, dimension(5)                                    :: binary_info_arr_kl
 		integer													:: end_state_flag
 		integer													:: out_end_state_flag, out_bin_i, out_bin_j, out_bin_k, out_bin_l
-		real*8													:: r_ij, radius_tot_ij, r_12, r_kl, r_ijkl
+		real*8													:: r_ij, radius_tot_ij, r_12, r_kl, r_ijk, r_ijl, r_ijkl
 		real*8, dimension(3,3)									:: q_in
 		real*8, dimension(3)									:: PA_a1a2a3
 		real*8													:: max_a1a2a3
-        real*8                                                  :: KE, PE, eps, Mtot, M_in, v_dir, v_dir_ij, v_dir_kl
+        real*8                                                  :: KE, PE, eps, Mtot, M_in, v_dir, v_dir_ij, v_dir_kl, v_dir_k
         real*8                                                  :: KE1, KE2, M1, M2
 		real*8, dimension(3)									:: r_CM, v_CM, CM, CM_num, vCM_num
 		real*8, dimension(3)									:: CM1, CM2, vCM1, vCM2
@@ -855,8 +855,9 @@ CONTAINS
         real*8                                                  :: a_bin, e_bin, a_bin_out, e_bin_out, inc_bin
         real*8                                                  :: a_in, e_in, a_out, e_out, inc
         real*8                                                  :: E_kin, E_pot, E_tot, E_check, L_check, L_ini, E_ini
+        real*8, dimension(3)                                    :: L_check_vec, L_ini_vec
         real*8                                                  :: Etot_ijkl, Etot_ijk, Etot_ij, Etot_ik, Etot_il, Etot_kl
-        real*8                                                  :: term1, term2, Ft, delta_F, delta_EL
+        real*8                                                  :: term1, term2, Ft, Ft1, Ft2, delta_F, delta_EL
         integer                                                 :: unbound, ub1, ub2, ub3, ub4
         integer                                                 :: one_unbound_yesno, two_unbound_yesno, all_unbound_yesno
         integer                                                 :: stability_crit_yesno
@@ -876,7 +877,7 @@ CONTAINS
 		out_bin_j 			= 0
 		out_bin_k 			= 0
 		out_bin_l 			= 0
-        delta_F             = 1e-5                      ! Ftid/Frel threshold
+        delta_F             = 1e-8                      ! Ftid/Frel threshold
         delta_EL            = 1e-3                      ! E,L threshold
 		!------------------------------------------------------------
 		!Check for tidal disruptions:
@@ -946,12 +947,94 @@ CONTAINS
 
 
 		!------------------------------------------------------------
-        !CHECK FOR UNBOUND OBJECTS!
+		!Check for inspirals (endstate = 5)
+		!------------------------------------------------------------
+		do i=1, n_particles,1
+		do j=1, n_particles,1
+		if (i .NE. j) then
+		IF (end_state_flag .EQ. 0) THEN		!if no end-state yet.
+			!-----------------------------------
+			!calc:
+			!-----------------------------------
+			radius_tot_ij	= radius(i) + radius(j)	
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)		! system [i,j]
+            E_tot	    	= binary_info_arr_ij(3)
+            a_bin   		= binary_info_arr_ij(4)   	
+            e_bin           = binary_info_arr_ij(5)
+            if (E_tot .LT. 0 .and. (a_bin/radius_tot_ij) .LT. insp_threshold) then
+                end_state_flag = 5			!INSPIRAL STATE	
+				out_bin_i 			= i
+				out_bin_j 			= j
+                mass_bin_i          = mass(i)
+                mass_bin_j          = mass(j)
+			endif
+			!-----------------------------------
+		ENDIF	!endstate
+		endif	!i NE j
+		enddo	!loop over j
+		enddo	!loop over i
+
+
+		!------------------------------------------------------------
+        !CHECK FOR AN UNBOUND OBJECT IN BODY CASE!
+		!Check for bound binary with 1 unbound object (endstate = 4)
+		!------------------------------------------------------------
+		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 3) THEN		!if endstate not found
+
+		!Initialize check flag params:
+        unbound = 0             ! counter for number of unbound objects
+
+        !See how many objects in the system are unbound
+		do i=1, n_particles,1
+        do j=i+1, n_particles,1
+        k = 6 - (i+j)
+
+        CM_pos = CoM_3body(pos(i,:), mass(i), pos(j,:), mass(j), pos(k,:), mass(k))
+        CM_vel = CoM_3body(vel(i,:), mass(i), vel(j,:), mass(j), vel(k,:), mass(k))
+        CM1 = CoM_2body(pos(i,:), mass(i), pos(j,:), mass(j))
+        vCM1 = CoM_2body(vel(i,:), mass(i), vel(j,:), mass(j))
+        Mtot = mass(i) + mass(j)
+        CALL    Calc_binary_info(pos(k,:), vel(k,:), mass(k), CM1, vCM1, Mtot, binary_info_arr_ijk)
+        Etot_ijk = binary_info_arr_ijk(3)
+
+        CALL   Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)
+        Etot_ij = binary_info_arr_ij(3)
+        a_bin = binary_info_arr_ij(4)
+        e_bin = binary_info_arr_ij(5)
+
+        v_dir_ij = DOT_PRODUCT((CM1-CM_pos), (vCM1-CM_vel))
+        v_dir_k = DOT_PRODUCT((pos(k,:)-CM_pos), (vel(k,:)-CM_vel))
+
+        if (Etot_ijk .GT. 0.0 .AND. Etot_ij .LT. 0.0 .AND. v_dir_ij .GT. 0 .AND. v_dir_ij .GT. 0) then
+            
+                ! see if binary [i,j] is bound below tidal threshold
+                r_ijk = len3vec(CM1-pos(k,:))
+                Ft = Fthresh(mass(i),mass(j),mass(k),a_bin,e_bin,r_ijk)
+                if (Ft .LT. delta_F) then
+                    end_state_flag = 4     ! bound binary with unbound object
+                    out_bin_i 			= i
+                    out_bin_j 			= j
+                    mass_bin_i          = mass(i)
+                    mass_bin_j          = mass(j)
+                endif
+                    
+
+        endif !force check
+
+        enddo !loop over j
+        enddo !loop over i
+
+        ENDIF !endstate
+
+
+
+		!------------------------------------------------------------
+        !CHECK FOR UNBOUND OBJECTS IN 4BODY CASE!
 		!Check for stable triple with 1 unbound object (endstate = 3)
 		!Check for bound binary with 2 unbound object (endstate = 4)
 		!Check for total ionization (endstate = 7)
 		!------------------------------------------------------------
-		IF (end_state_flag .EQ. 0) THEN		!if endstate not found
+		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if endstate not found
 
 		!Initialize check flag params:
         unbound = 0             ! counter for number of unbound objects
@@ -1009,7 +1092,7 @@ CONTAINS
 
         
         ! 1 UNBOUND: see if the three remaining are in a stable triple system (only works for 4-body)
-        if (unbound .EQ. 1) then
+        if (unbound .EQ. 1 .AND. n_particles .EQ. 4) then
             do i=1, n_particles,1
             do j=i+1, n_particles,1
             do k=1, n_particles,1
@@ -1031,34 +1114,39 @@ CONTAINS
                 a_out = binary_info_arr_out(4)
                 e_out = binary_info_arr_out(5)
             
-                ! calculate inclination from angular momentum vectors
-                inc = ACOS(DOT_PRODUCT(Lin_vec,Lout_vec))
+                ! make sure a_in is less than a_out and inner system is bound
+                if (a_in .GT. 0 .AND. a_in .LT. a_out) then
 
-                ! now, we see if a stable triple was formed...
-                ! Marding & Aarseth criteria:
-                term1 = a_out/a_in * (1d0-e_out)
-                term2 = 2.8 * ((1d0 + M_in/mass(k))*((1+e_out)/SQRT(1-e_out))**(2d0/5d0) &
-                            * (1d0 - (0.3/3.1415)*inc))
-                ! Threshold that Ftid/Frel < delta = 1e-5
-                CM_pos = CoM_3body(pos(i,:), mass(i), pos(j,:), mass(j), pos(k,:), mass(k))
-                r_ij  = len3vec(CM_pos-pos(ub1,:))
-                Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
+                    ! calculate inclination from angular momentum vectors
+                    inc = ACOS(DOT_PRODUCT(Lin_vec,Lout_vec)/(len3vec(Lin_vec)*len3vec(Lout_vec)))
 
-                ! check if stable triple criteria is met, and write output variables
-                if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
-                    end_state_flag = 3			!STABLE TRIPLE STATE STATE	
-                    out_bin_i 			= i
-                    out_bin_j 			= j
-                    out_bin_k 			= k
-                    mass_bin_i          = mass(i)
-                    mass_bin_j          = mass(j)
-                    mass_bin_k          = mass(k)
-                    a_bin               = a_in
-                    a_bin_out           = a_out
-                    e_bin               = e_in
-                    e_bin_out           = e_out
-                    inc_bin             = inc
-                endif
+                    ! now, we see if a stable triple was formed...
+                    ! Marding & Aarseth criteria:
+                    term1 = a_out/a_in * (1d0-e_out)
+                    term2 = 2.8 * ((1d0 + M_in/mass(k))*((1+e_out)/SQRT(1-e_out))**(2d0/5d0) &
+                                * (1d0 - (0.3/3.1415)*inc))
+
+                    ! Threshold that Ftid/Frel < delta = 1e-5
+                    CM_pos = CoM_3body(pos(i,:), mass(i), pos(j,:), mass(j), pos(k,:), mass(k))
+                    r_ij  = len3vec(CM_pos-pos(ub1,:))
+                    Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
+
+                    ! check if stable triple criteria is met, and write output variables
+                    if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
+                        end_state_flag = 3			!STABLE TRIPLE STATE STATE	
+                        out_bin_i 			= i
+                        out_bin_j 			= j
+                        out_bin_k 			= k
+                        mass_bin_i          = mass(i)
+                        mass_bin_j          = mass(j)
+                        mass_bin_k          = mass(k)
+                        a_bin               = a_in
+                        a_bin_out           = a_out
+                        e_bin               = e_in
+                        e_bin_out           = e_out
+                        inc_bin             = inc
+                    endif !if flag is set
+                endif !if a_in < a_out
 
             endif
             enddo
@@ -1071,7 +1159,7 @@ CONTAINS
 
 
         ! 2 UNBOUND: see if the two remaining are bound
-        if (unbound .EQ. 2) then
+        if (unbound .EQ. 2 .AND. n_particles .EQ. 4) then
 
             ! write info for the bound binary
             do j=1, n_particles, 1
@@ -1099,16 +1187,12 @@ CONTAINS
             ! first, make sure the system is actually bound (PE > KE)
             if (E_tot .LT. 0) then
                 ! first unbound object
-                r_ij  = len3vec(CM_pos-pos(ub1,:))
-                Ft = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub1),a_bin,e_bin,r_ij)
-                if (Ft .LT. delta_F) then
-                    ! second unbound object
-                    r_ij  = len3vec(CM_pos-pos(ub2,:))
-                    Ft = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub2),a_bin,e_bin,r_ij)
-                    if (Ft .LT. delta_F) then
-                        end_state_flag = 4  !>(N-2) systems are unbound
-                    endif
-                endif
+                r_ijk  = len3vec(CM_pos-pos(ub1,:))
+                Ft1 = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub1),a_bin,e_bin,r_ijk)
+                ! second unbound object
+                r_ijl  = len3vec(CM_pos-pos(ub2,:))
+                Ft2 = Fthresh(mass(out_bin_i),mass(out_bin_j),mass(ub2),a_bin,e_bin,r_ijl)
+                if (Ft1 .LT. delta_F .AND. Ft2 .LT. delta_F)        end_state_flag = 4  !>(N-2) systems are unbound
             endif
 
         endif ! if statement for two unbound objects
@@ -1116,8 +1200,8 @@ CONTAINS
         
 
 
-        ! >2 UNBOUND: write info and set total ionization flag
-        if (unbound .GT. 2) then
+        ! >2 UNBOUND: write info and set total ionization flag   # FIXME: flagged removed for now
+        if (unbound .GT. 2 .AND. n_particles .EQ. 4) then
             
             ! write info for the output file
             out_bin_i = ub1
@@ -1129,42 +1213,13 @@ CONTAINS
             mass_bin_k = mass(ub3)
             if (unbound .EQ. 4)   mass_bin_l = mass(ub4)
 
-            end_state_flag = 7  !TOTAL IONIZATION
+!            end_state_flag = 7  !TOTAL IONIZATION
 
         endif ! if statement for total ionization
 
 
         ENDIF
 
-
-
-		!------------------------------------------------------------
-		!Check for inspirals (endstate = 5)
-		!------------------------------------------------------------
-		do i=1, n_particles,1
-		do j=1, n_particles,1
-		if (i .NE. j) then
-		IF (end_state_flag .EQ. 0) THEN		!if no end-state yet.
-			!-----------------------------------
-			!calc:
-			!-----------------------------------
-			radius_tot_ij	= radius(i) + radius(j)	
-            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)		! system [i,j]
-            E_tot	    	= binary_info_arr_ij(3)
-            a_bin   		= binary_info_arr_ij(4)   	
-            e_bin           = binary_info_arr_ij(5)
-            if (E_tot .LT. 0 .and. (a_bin/radius_tot_ij) .LT. insp_threshold) then
-                end_state_flag = 5			!INSPIRAL STATE	
-				out_bin_i 			= i
-				out_bin_j 			= j
-                mass_bin_i          = mass(i)
-                mass_bin_j          = mass(j)
-			endif
-			!-----------------------------------
-		ENDIF	!endstate
-		endif	!i NE j
-		enddo	!loop over j
-		enddo	!loop over i
 
 
 
@@ -1215,23 +1270,21 @@ CONTAINS
                         if (E_tot .GT. 0 .AND. v_dir_ij .GT. 0 .AND. v_dir_kl .GT. 0) then
                             ! see if binary [i,j] is bound below tidal threshold
                             r_ijkl = len3vec(CM1-CM2)
-                            Ft = Fthresh(mass(i),mass(j),M2,a_bin,e_bin,r_ijkl)
-                            if (Ft .LT. delta_F) then
-                                ! see if binary [k,l] is bound below tidal threshold    
-                                Ft = Fthresh(mass(k),mass(l),M1,a_bin_out,e_bin_out,r_ijkl)
-                                if (Ft .LT. delta_F) then
-                                    end_state_flag = 6  ! two bound systems unbound from one another!
+                            Ft1 = Fthresh(mass(i),mass(j),M2,a_bin,e_bin,r_ijkl)
+                            ! see if binary [k,l] is bound below tidal threshold    
+                            Ft2 = Fthresh(mass(k),mass(l),M1,a_bin_out,e_bin_out,r_ijkl)
+                            if (Ft1 .LT. delta_F .AND. Ft2 .LT. delta_F) then
+                                end_state_flag = 6  ! two bound systems unbound from one another!
 
-                                    ! set the indices of bound systems [i,j] and [k,l]
-                                    out_bin_i = i
-                                    mass_bin_i = mass(i)
-                                    out_bin_j = j
-                                    mass_bin_j = mass(j)
-                                    out_bin_k = k
-                                    mass_bin_k = mass(k)
-                                    out_bin_l = l
-                                    mass_bin_l = mass(l)
-                                endif
+                                ! set the indices of bound systems [i,j] and [k,l]
+                                out_bin_i = i
+                                mass_bin_i = mass(i)
+                                out_bin_j = j
+                                mass_bin_j = mass(j)
+                                out_bin_k = k
+                                mass_bin_k = mass(k)
+                                out_bin_l = l
+                                mass_bin_l = mass(l)
                             endif
                         endif    !loop for energy and force threshold checks
 
@@ -1265,14 +1318,15 @@ CONTAINS
                 E_pot = E_pot + mass(i)*mass(j)/len3vec(IC_par_pos(i,:)-IC_par_pos(j,:))
             enddo
         enddo
-        E_ini = E_kin + E_pot
-        L_ini = 0d0
+        E_ini = E_kin - E_pot
+        L_ini_vec = [0,0,0]
         do i=1, n_particles,1
             do j=i+1, n_particles,1
                 CALL Calc_binary_L(IC_par_pos(i,:),IC_par_vel(i,:),mass(i),IC_par_pos(j,:),IC_par_vel(j,:),mass(j),Lvec)
-                L_ini = L_ini + len3vec(Lvec)
+                L_ini_vec = L_ini_vec + Lvec
             enddo
         enddo 
+        L_ini = len3vec(L_ini_vec)
 
 
         ! calculate the energy and angular momentum at this step
@@ -1286,17 +1340,18 @@ CONTAINS
                 E_pot = E_pot + mass(i)*mass(j)/len3vec(pos(i,:)-pos(j,:))
             enddo
         enddo
-        E_check = E_kin + E_pot
-        L_check = 0d0
+        E_check = E_kin - E_pot
+        L_check_vec = [0,0,0]
         do i=1, n_particles,1
             do j=i+1, n_particles,1
                 CALL Calc_binary_L(pos(i,:),vel(i,:),mass(i),pos(j,:),vel(j,:),mass(j),Lvec)
-                L_check = L_check + len3vec(Lvec)
+                L_check_vec = L_check_vec + Lvec
             enddo
-        enddo 
+        enddo
+        L_check = len3vec(L_check_vec)
 
         if (L_check/L_ini .GT. 1.0-delta_EL .OR. E_check/E_ini .GT. 1.0-delta_EL) then
-!            end_state_flag = 7              ! Energy/Momentum criteria conservation not met!        #FIXME
+!            end_state_flag = 8              ! Energy/Momentum criteria conservation not met!        #FIXME
         endif
 
 		ENDIF	!endstate
@@ -1732,7 +1787,7 @@ CONTAINS
 
 
 	!----------------------------------------------------------------------------------------------------
-	SUBROUTINE  output_4body_sub(Y, time_t)
+	SUBROUTINE  output_Nbody_sub(Y, time_t)
 	!----------------------------------------------------------------------------------------------------
 		IMPLICIT NONE
 		real*8, dimension(tot_nr_Y_evol_eqs), intent(in)		:: Y
@@ -1755,19 +1810,37 @@ CONTAINS
 		!------------------------------------------------------------
 		!Write info to file:
 		!------------------------------------------------------------
+		!for 3 particle
+		if (n_particles .EQ. 3) then
+            !if downsample is 0, don't write any position/velocity data
+            !if downsample is 1, write every step
+            if (downsample .EQ. 1) then
+			    write(10,*) pos(1,:), pos(2,:), pos(3,:)
+			    write(18,*) vel(1,:), vel(2,:), vel(3,:)
+			    write(11,*) time_t
+            endif
+            !if downsample is an integer >1, only write the downsample'th step
+            if (downsample .GT. 1 .AND. stepc .GE. ds*downsample) then
+			    write(10,*) pos(1,:), pos(2,:), pos(3,:)
+			    write(18,*) vel(1,:), vel(2,:), vel(3,:)
+			    write(11,*) time_t
+                ds = ds + 1
+		    endif
+        endif
+
 		!for 4 particle
 		if (n_particles .EQ. 4) then
             !if downsample is 0, don't write any position/velocity data
             !if downsample is 1, write every step
             if (downsample .EQ. 1) then
-			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
-			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
+			    write(10,*) pos(1,:), pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:), vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
             endif
             !if downsample is an integer >1, only write the downsample'th step
             if (downsample .GT. 1 .AND. stepc .GE. ds*downsample) then
-			    write(10,*) pos(1,:),  pos(2,:), pos(3,:), pos(4,:)
-			    write(18,*) vel(1,:),  vel(2,:), vel(3,:), vel(4,:)
+			    write(10,*) pos(1,:), pos(2,:), pos(3,:), pos(4,:)
+			    write(18,*) vel(1,:), vel(2,:), vel(3,:), vel(4,:)
 			    write(11,*) time_t
                 ds = ds + 1
 		    endif
@@ -1775,7 +1848,7 @@ CONTAINS
 		!------------------------------------------------------------
 
 
-	END SUBROUTINE output_4body_sub
+	END SUBROUTINE output_Nbody_sub
 	!----------------------------------------------------------------------------------------------------
 	!----------------------------------------------------------------------------------------------------
 	
@@ -2353,7 +2426,7 @@ CONTAINS
         !Write to data files
         !-----------------------------------
 		if (IC_code_version .EQ. 1) then
-		if (outputinfo_screenfiles .EQ. 1)	CALL output_4body_sub(Y,TOUT)
+		if (outputinfo_screenfiles .EQ. 1)	CALL output_Nbody_sub(Y,TOUT)
 		endif	!code version 1					
 
 
@@ -2593,6 +2666,7 @@ CONTAINS
 	print*, 'Time = seconds:	', t_now-t_start
 	if (outputinfo_screenfiles .EQ. 1) then
 		print*, endsim_end_state_flag
+        print*, Return_Nbody_endstate(2:5)
         print*, Return_endstate_binparams(:)
 		print*, mass(1), radius(1), endsim_Y(1:6)
         print*, mass(2), radius(2), endsim_Y(25:30)
