@@ -856,8 +856,9 @@ CONTAINS
         real*8                                                  :: a_in, e_in, a_out, e_out, inc
         real*8                                                  :: E_kin, E_pot, E_tot, E_check, L_check, L_ini, E_ini
         real*8, dimension(3)                                    :: L_check_vec, L_ini_vec
-        real*8                                                  :: Etot_ijkl, Etot_ijk, Etot_ij, Etot_ik, Etot_il, Etot_kl
-        real*8                                                  :: term1, term2, Ft, Ft1, Ft2, delta_F, delta_EL
+        real*8                                                  :: Etot_ij, Etot_ik, Etot_il, Etot_kl
+        real*8                                                  :: Etot_ijkl, Etot_ijk, Etot_ijl, Etot_ikl
+        real*8                                                  :: term1, term2, Ft, Ft1, Ft2, delta_F, delta_EL, delta_F_triple
         integer                                                 :: unbound, ub1, ub2, ub3, ub4
         integer                                                 :: one_unbound_yesno, two_unbound_yesno, all_unbound_yesno
         integer                                                 :: stability_crit_yesno
@@ -877,7 +878,8 @@ CONTAINS
 		out_bin_j 			= 0
 		out_bin_k 			= 0
 		out_bin_l 			= 0
-        delta_F             = 1e-8                      ! Ftid/Frel threshold
+        delta_F             = 1e-5                      ! Ftid/Frel threshold
+        delta_F_triple      = 1e-3                      ! Ftid/Frel threshold for triple check
         delta_EL            = 1e-3                      ! E,L threshold
 		!------------------------------------------------------------
 		!Check for tidal disruptions:
@@ -1056,6 +1058,27 @@ CONTAINS
             CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ijkl)
             Etot_ijkl = binary_info_arr_ijkl(3)
 
+            !particle i against system jk
+            CM_pos = CoM_2body(pos(j,:), mass(j), pos(k,:), mass(k))
+            CM_vel = CoM_2body(vel(j,:), mass(j), vel(k,:), mass(k))
+            Mtot = mass(j) + mass(k)
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ijk)
+            Etot_ijk = binary_info_arr_ijk(3)
+
+            !particle i against system jl
+            CM_pos = CoM_2body(pos(j,:), mass(j), pos(l,:), mass(l))
+            CM_vel = CoM_2body(vel(j,:), mass(j), vel(l,:), mass(l))
+            Mtot = mass(j) + mass(l)
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ijl)
+            Etot_ijl = binary_info_arr_ijl(3)
+
+            !particle i against system kl
+            CM_pos = CoM_2body(pos(k,:), mass(k), pos(l,:), mass(l))
+            CM_vel = CoM_2body(vel(k,:), mass(k), vel(l,:), mass(l))
+            Mtot = mass(k) + mass(l)
+            CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), CM_pos, CM_vel, Mtot, binary_info_arr_ikl)
+            Etot_ikl = binary_info_arr_ikl(3)
+
             !particle i against particle j
             CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij)
             Etot_ij = binary_info_arr_ij(3)
@@ -1073,8 +1096,8 @@ CONTAINS
             CM_vel = CoM_4body(vel(i,:), mass(i), vel(j,:), mass(j), vel(k,:), mass(k), vel(l,:), mass(l))
             v_dir = DOT_PRODUCT((pos(i,:)-CM_pos), (vel(i,:)-CM_vel))
 
-            if (Etot_ijkl .GT. 0 .AND. Etot_ij .GT. 0 .AND. Etot_ik .GT. 0 .AND. &
-                                       Etot_il .GT. 0 .AND. v_dir .GT. 0) then
+            if (Etot_ijkl .GT. 0 .AND. Etot_ijk .GT. 0 .AND. Etot_ijl .GT. 0 .AND. Etot_ikl .GT. 0 .AND.  &
+                    Etot_ij .GT. 0 .AND. Etot_ik .GT. 0 .AND. Etot_il .GT. 0 .AND. v_dir .GT. 0) then
             !if (Etot_ijkl .GT. 0 .AND. v_dir .GT. 0) then
                 unbound = unbound + 1
                 if (unbound .EQ. 1)   ub1 = i
@@ -1131,8 +1154,10 @@ CONTAINS
                     r_ij  = len3vec(CM_pos-pos(ub1,:))
                     Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
 
+                    if (term1 .GT. term2)           print*, Ft
+
                     ! check if stable triple criteria is met, and write output variables
-                    if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
+                    if (term1 .GT. term2 .AND. Ft .LT. delta_F_triple) then
                         end_state_flag = 3			!STABLE TRIPLE STATE STATE	
                         out_bin_i 			= i
                         out_bin_j 			= j
