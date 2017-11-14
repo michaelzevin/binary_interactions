@@ -54,7 +54,7 @@ def z_rot(v, theta):
     return np.dot(rot,v)
 
 # threshold functions
-tid_thresh = 10**-5
+tid_thresh = 10**-3
 def v_crit(m11,m12,m21,m22,a1,a2):
     mu_tot = mu(Mtot(m11,m12),Mtot(m21,m22))
     return np.sqrt((1./mu_tot)*((m11*m12/a1)+(m21*m22/a2)))
@@ -163,8 +163,8 @@ argp.add_argument("-f", "--file", type=str, help="Specify the file path to the g
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
 argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
-argp.add_argument("--orbits", type=int, default=1000000, help="Number of orbits to integrate for. Default=1e6.")
-argp.add_argument("--steps", type=int, default=100000000, help="Number of simulation steps to integrate for. Default=1e8.")
+argp.add_argument("--orbits", type=int, default=10000, help="Number of orbits to integrate for. Default=1e4.")
+argp.add_argument("--steps", type=int, default=10000000, help="Number of simulation steps to integrate for. Default=1e7.")
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
 argp.add_argument("--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")

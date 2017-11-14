@@ -878,8 +878,7 @@ CONTAINS
 		out_bin_j 			= 0
 		out_bin_k 			= 0
 		out_bin_l 			= 0
-        delta_F             = 1e-5                      ! Ftid/Frel threshold
-        delta_F_triple      = 1e-3                      ! Ftid/Frel threshold for triple check
+        delta_F             = 1e-3                      ! Ftid/Frel threshold
         delta_EL            = 1e-3                      ! E,L threshold
 		!------------------------------------------------------------
 		!Check for tidal disruptions:
@@ -1154,10 +1153,8 @@ CONTAINS
                     r_ij  = len3vec(CM_pos-pos(ub1,:))
                     Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
 
-                    if (term1 .GT. term2)           print*, Ft
-
                     ! check if stable triple criteria is met, and write output variables
-                    if (term1 .GT. term2 .AND. Ft .LT. delta_F_triple) then
+                    if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
                         end_state_flag = 3			!STABLE TRIPLE STATE STATE	
                         out_bin_i 			= i
                         out_bin_j 			= j
@@ -1269,8 +1266,8 @@ CONTAINS
                     Etot_kl = binary_info_arr_kl(3)
                     ! see if PE is greater than KE
                     if (Etot_kl .LT. 0) then
-                        a_bin_out = binary_info_arr_ij(4)
-                        e_bin_out = binary_info_arr_ij(5)
+                        a_bin_out = binary_info_arr_kl(4)
+                        e_bin_out = binary_info_arr_kl(5)
                         
 
                         ! now, we see if the two systems are unbound, and if they are below the tidal threshold
