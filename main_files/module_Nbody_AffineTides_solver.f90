@@ -878,6 +878,15 @@ CONTAINS
 		out_bin_j 			= 0
 		out_bin_k 			= 0
 		out_bin_l 			= 0
+        mass_bin_i          = 0.0
+        mass_bin_j          = 0.0
+        mass_bin_k          = 0.0
+        mass_bin_l          = 0.0
+        a_bin               = 0.0
+        e_bin               = 0.0
+        a_bin_out           = 0.0
+        e_bin_out           = 0.0
+        inc_bin             = 0.0
         delta_F             = 1e-3                      ! Ftid/Frel threshold
         delta_EL            = 1e-3                      ! E,L threshold
 		!------------------------------------------------------------
