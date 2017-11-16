@@ -46,6 +46,9 @@ SUBROUTINE Calc_binary_info(pos_1, vel_1, mass_1, pos_2, vel_2, mass_2, out_bina
 # Remove redspace in vim for fortran code:
 :hi link fortranTab NONE
 
+# Remove first N characters of file
+sed -i -r '1s/^.{N}//' file.dat
+
 
 
 ---------------------------------------------------------------------------
