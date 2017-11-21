@@ -58,6 +58,8 @@ tid_thresh = 10**-3
 def v_crit(m11,m12,m21,m22,a1,a2):
     mu_tot = mu(Mtot(m11,m12),Mtot(m21,m22))
     return np.sqrt((1./mu_tot)*((m11*m12/a1)+(m21*m22/a2)))
+def v_crit_3body(m11,m12,m21,a1):
+    return np.sqrt(m11*m12*(m11+m12+m21) / (m21*(m11+m12)*a1))
 def r_evolve(m11,m12,m21,m22,a1,e1):
     return (2*Mtot(m11,m12)*Mtot(m21,m22) / (tid_thresh*m11*m12))**(1./3) * a1*(1+e1)
 
@@ -162,11 +164,11 @@ argp = argparse.ArgumentParser()
 argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
 argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
+argp.add_argument("-np", "--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=10000, help="Number of orbits to integrate for. Default=1e4.")
 argp.add_argument("--steps", type=int, default=10000000, help="Number of simulation steps to integrate for. Default=1e7.")
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
-argp.add_argument("--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")
 argp.add_argument("--screen-out", action="store_true", help="Boolean to determined whether info is printed to screen. ")
 args = argp.parse_args()
@@ -180,7 +182,6 @@ n_part = args.n_particles
 data=pd.read_csv(args.file, sep=' ', index_col=None)
 for key in data:
     data.rename(index=str, columns={key: key[(key.index(':')+1):]}, inplace=True)
-
 
 
 if n_part==4:
@@ -377,13 +378,6 @@ if n_part==3:
     a1,e1 = binary['a1'],binary['e1']
     m21 = binary['m21']
 
-    # create a "fake" particle so we don't need to change the code...#FIXME
-    m22 = 0.00001
-    M2 = Mtot(m21,m22)
-    a2 = 0.00001
-    e2 = 0.00001
-    
-
     # get the impact parameter by either taking b_max in the cluster case or sampling in the circle for the grid case
     if args.fixed_b:
         b = binary['b']
@@ -391,14 +385,14 @@ if n_part==3:
         b = b_from_bmax(binary['b'])
 
     # grab our random values
-    theta1, theta2 = theta_mc(), theta_mc()
-    phi_p1, phi_p2 = phi_mc(), phi_mc()
-    phi_omega1, phi_omega2 = phi_mc(), phi_mc()
+    theta1 = theta_mc()
+    phi_p1 = phi_mc()
+    phi_omega1 = phi_mc()
     # make sure phase calculation converges...FIXME this is hacky AF
     condition = False
     while not condition:
         try:
-            f1, f2 = phase(phi_mc(), e1), phase(phi_mc(), e2)
+            f1 = phase(phi_mc(), e1)
             condition = True
         except:
             pass
@@ -442,79 +436,50 @@ if n_part==3:
 
 
 
-    # INCOMING "BINARY"
+    # INCOMING PARTICLE
 
-    r2_mag = r_mu(a2,e2,f2)
-    v2_mag = v_mu(r2_mag,a2,M2) # for checking against the norm of v22
     # start in CoM frame of particle 1
     x21 = np.asarray([0, 0, 0])
-    x22 = np.asarray([r2_mag*np.cos(f2),r2_mag*np.sin(f2),0])
-    v21 = np.asarray([0,0,0])
-    v22 = np.asarray([-v_r(a2,e2,M2,f2)*np.cos(f2) - v_phi(a2,e2,M2,r2_mag)*np.sin(f2), \
-          -v_r(a2,e2,M2,f2)*np.sin(f2) + v_phi(a2,e2,M2,r2_mag)*np.cos(f2), 0])
+    v21 = np.asarray([0, 0, 0])
 
-    # get things in the center of mass of first binary
-    x2_CoM = [CoM([m21,m22],[x21[0],x22[0]]),CoM([m21,m22],[x21[1],x22[1]]),CoM([m21,m22],[x21[2],x22[2]])]
-    x21_mag = r_i(r2_mag,m21,M2) # for checking against the norm of x11
-    x22_mag = r_i(r2_mag,m22,M2) # for checking against the norm of x12
-    x21 = x21 - x2_CoM
-    x22 = x22 - x2_CoM
-    v2_CoM = [CoM([m21,m22],[v21[0],v22[0]]),CoM([m21,m22],[v21[1],v22[1]]),CoM([m21,m22],[v21[2],v22[2]])]
-    v21_mag = np.sqrt((2./r2_mag - 1./a2)/M2)*(M2-m21) # for checking against the norm of v11
-    v22_mag = np.sqrt((2./r2_mag - 1./a2)/M2)*(M2-m22) # for checking against the norm of v12
-    v21 = v21 - v2_CoM
-    v22 = v22 - v2_CoM
-
-    # rotate binary to randomize periapse angle, inclination, and ascending node
-    # rotate about angle of periapse (z-rot):
-    x21, x22 = z_rot(x21, phi_p2), z_rot(x22, phi_p2)
-    v21, v22 = z_rot(v21, phi_p2), z_rot(v22, phi_p2)
-    # rotate about angle of inclination (y-rot):
-    x21, x22 = y_rot(x21, theta2), y_rot(x22, theta2)
-    v21, v22 = y_rot(v21, theta2), y_rot(v22, theta2)
-    # rotate about angle of ascending node (z-rot):
-    x21, x22 = z_rot(x21, phi_omega2), z_rot(x22, phi_omega2)
-    v21, v22 = z_rot(v21, phi_omega2), z_rot(v22, phi_omega2)
-
+    # particle is already in the center of mass of its system, obviously
+    # no need to rotate by angle of periapse, inclination, and ascending node
 
 
     # Move binary 2 into CoM frame of binary 1
-    v_inf = binary['v/v_crit']*v_crit(m11,m12,m21,m22,a1,a2)
+    v_inf = binary['v/v_crit']*v_crit_3body(m11,m12,m21,a1)
     # we now find the velocity and impact parameter at point where the binaries are separated by r_evolve
     # where r_evolve is the max distance between sys 1 and sys 2 where tidal threshold is reached
-    r_start_1 = r_evolve(m11,m12,m21,m22,a1,e1)
-    r_start_2 = r_evolve(m21,m22,m11,m12,a2,e2)
-    r_start = max([r_start_1,r_start_2])
+    r_start = r_evolve(m11,m12,m21,0.0,a1,e1)
 
     v_start = np.sqrt(v_inf**2 + 2*M1/r_start)   # conservation of energy
     b_start = b*v_inf / v_start   # conservation of angular momentum
     d_start = np.sqrt(r_start**2 - b_start**2)
     x_shift = np.asarray([d_start, 0, b_start]) # incorporate impact parameter along the z-axis
     v_shift = np.asarray([-v_start, 0, 0])
-    x21, x22 = x21+x_shift, x22+x_shift
-    v21, v22 = v21+v_shift, v22+v_shift
+    x21 = x21+x_shift
+    v21 = v21+v_shift
 
 
 
     # Almost there...last we move things to the center of mass frame for the two binaries
-    x_CoM = [CoM([m11,m12,m21,m22],[x11[0],x12[0],x21[0],x22[0]]), \
-                CoM([m11,m12,m21,m22],[x11[1],x12[1],x21[1],x22[1]]), \
-                   CoM([m11,m12,m21,m22],[x11[2],x12[2],x21[2],x22[2]])]
-    v_CoM = [CoM([m11,m12,m21,m22],[v11[0],v12[0],v21[0],v22[0]]), \
-                CoM([m11,m12,m21,m22],[v11[1],v12[1],v21[1],v22[1]]), \
-                   CoM([m11,m12,m21,m22],[v11[2],v12[2],v21[2],v22[2]])]
+    x_CoM = [CoM([m11,m12,m21],[x11[0],x12[0],x21[0]]), \
+                CoM([m11,m12,m21],[x11[1],x12[1],x21[1]]), \
+                   CoM([m11,m12,m21],[x11[2],x12[2],x21[2]])]
+    v_CoM = [CoM([m11,m12,m21],[v11[0],v12[0],v21[0]]), \
+                CoM([m11,m12,m21],[v11[1],v12[1],v21[1]]), \
+                   CoM([m11,m12,m21],[v11[2],v12[2],v21[2]])]
     x11, v11 = x11-x_CoM, v11-v_CoM
     x12, v12 = x12-x_CoM, v12-v_CoM
     x21, v21 = x21-x_CoM, v21-v_CoM
-    x22, v22 = x22-x_CoM, v22-v_CoM
 
 
-    # Calculate average orbital period for two binaries to use for integration time #NOTE: this is the only thing we change really...
+    # Calculate average orbital period for two binaries to use for integration time
     T = (period(a1,M1))
 
     # Store binary info in dictionary
     binary_input={'n':n_part, 'tau':args.orbits*T, 'm11':m11, 'x11':x11, 'v11':v11, 'm12':m12, 'x12':x12, 'v12':v12, \
-        'm21':m21, 'x21':x21, 'v21':v21, 'm22':m22, 'x22':x22, 'v22':v22}
+        'm21':m21, 'x21':x21, 'v21':v21}
 
     write_input(binary_input, PN=args.pn, steps=args.steps, r_min=args.r_min, downsample=args.downsample, screen_out=args.screen_out)
 
