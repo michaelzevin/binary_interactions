@@ -54,7 +54,7 @@ def z_rot(v, theta):
     return np.dot(rot,v)
 
 # threshold functions
-tid_thresh = 10**-3
+tid_thresh = 10**-5
 def v_crit(m11,m12,m21,m22,a1,a2):
     mu_tot = mu(Mtot(m11,m12),Mtot(m21,m22))
     return np.sqrt((1./mu_tot)*((m11*m12/a1)+(m21*m22/a2)))
