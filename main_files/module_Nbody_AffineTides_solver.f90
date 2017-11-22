@@ -830,7 +830,7 @@ CONTAINS
 		IMPLICIT NONE
 		real*8, dimension(tot_nr_Y_evol_eqs),	intent(in)		:: Y
 		integer, dimension(5),					intent(out)		:: Return_Nbody_endstate
-		real*8, dimension(9),                   intent(out) 	:: Return_endstate_binparams
+		real*8, dimension(10),                   intent(out) 	:: Return_endstate_binparams
 		real*8, dimension(n_particles,length_Y_per_body_n)		:: body_all_all
 		real*8, dimension(n_particles,3)						:: pos, vel
 		real*8, dimension(n_particles,3,3)						:: body_all_q
@@ -846,7 +846,7 @@ CONTAINS
 		real*8, dimension(3)									:: PA_a1a2a3
 		real*8													:: max_a1a2a3
         real*8                                                  :: KE, PE, eps, Mtot, M_in, v_dir, v_dir_ij, v_dir_kl, v_dir_k
-        real*8                                                  :: KE1, KE2, M1, M2
+        real*8                                                  :: KE1, KE2, M1, M2, vCM
 		real*8, dimension(3)									:: r_CM, v_CM, CM, CM_num, vCM_num
 		real*8, dimension(3)									:: CM1, CM2, vCM1, vCM2
 		real*8, dimension(3)									:: CM_pos, CM_vel, Lin_vec, Lout_vec, Lvec
@@ -1390,18 +1390,21 @@ CONTAINS
 
 		!Retun info:
         Return_Nbody_endstate(:) = [0,0,0,0,0]
-        Return_endstate_binparams(:) = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
+        Return_endstate_binparams(:) = [0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]
         !-----------------------------------
         !if endstate is found
         !-----------------------------------
         if (end_state_flag .NE. 0) then
             out_end_state_flag = end_state_flag
+            ! calculate CoM velocity of the bound binary
+            vCM = len3vec(CoM_2body(vel(out_bin_i,:), mass(out_bin_i), vel(out_bin_j,:), mass(out_bin_j)))
+
             Return_Nbody_endstate(:) = [out_end_state_flag, out_bin_i, out_bin_j, out_bin_k, out_bin_l]
             Return_endstate_binparams(:) = [mass_bin_i, mass_bin_j, mass_bin_k, mass_bin_l, a_bin, e_bin, &
-                            a_bin_out, e_bin_out, inc_bin]
+                            a_bin_out, e_bin_out, inc_bin, vCM]
         endif
         
-		!------------------------------------------------------------
+    !------------------------------------------------------------
 	END SUBROUTINE Nbody_endstate_sub
 	!----------------------------------------------------------------------------------------------------
 	!----------------------------------------------------------------------------------------------------
@@ -2191,7 +2194,7 @@ CONTAINS
 	integer, dimension(10)								:: Return_Nbody_info_INT_1
 	real*8, dimension(10)								:: Return_3body_Info_REAL_XTRAINFO
 	integer, dimension(5)								:: Return_Nbody_endstate
-	real*8, dimension(9)								:: Return_endstate_binparams
+	real*8, dimension(10)								:: Return_endstate_binparams
 	integer												:: endsim_end_state_flag, NBsystem_state_flag
     integer                                             :: NBsystem_bin_i, NBsystem_bin_j   ! Added by Mike
 	integer												:: nrc_usrstate
