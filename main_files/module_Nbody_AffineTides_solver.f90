@@ -11,6 +11,7 @@ real*8, dimension(:), allocatable					:: gas_gamma, Mqp_sph
 integer, dimension(:), allocatable					:: evoTides_yesno, RigidSph_yesno
 real*8, dimension(3,3)								:: I_MAT
 real*8												:: PN_gamma = 2.12370597232e-06	!postnewtonian gamma - units: Rsun, Msun, ....
+real*8                                              :: rsun_to_au = 0.004650467 !converts Rsun to AU, for writing output in AU
 integer												:: use_12PN, use_1PN, use_2PN, use_25PN, Identify_3Body_endstate, max_sim_nrsteps
 integer												:: outputinfo_screenfiles, downsample, stepc
 real*8												:: scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold
@@ -1400,8 +1401,8 @@ CONTAINS
             vCM = len3vec(CoM_2body(vel(out_bin_i,:), mass(out_bin_i), vel(out_bin_j,:), mass(out_bin_j)))
 
             Return_Nbody_endstate(:) = [out_end_state_flag, out_bin_i, out_bin_j, out_bin_k, out_bin_l]
-            Return_endstate_binparams(:) = [mass_bin_i, mass_bin_j, mass_bin_k, mass_bin_l, a_bin, e_bin, &
-                            a_bin_out, e_bin_out, inc_bin, vCM]
+            Return_endstate_binparams(:) = [mass_bin_i, mass_bin_j, mass_bin_k, mass_bin_l, a_bin*rsun_to_au, e_bin, &
+                            a_bin_out*rsun_to_au, e_bin_out, inc_bin, vCM*rsun_to_au]
         endif
         
     !------------------------------------------------------------

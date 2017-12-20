@@ -4,6 +4,7 @@ import os
 import random
 import argparse
 import scipy.optimize
+from astropy import units as u
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import errno
@@ -192,10 +193,9 @@ if n_part==4:
     data['b/(a1+a2)'] = data['b/(a1+a2)']*(data['a1']+data['a2'])
     data.rename(index=str, columns={'b/(a1+a2)':'b'}, inplace=True)
     # convert AU to R_sun
-    a_to_r = (1.5e8/6.975e5)
-    data['a1'] = data['a1']*a_to_r
-    data['a2'] = data['a2']*a_to_r
-    data['b'] = data['b']*a_to_r
+    data['a1'] = data['a1']*u.AU.to(u.Rsun)
+    data['a2'] = data['a2']*u.AU.to(u.Rsun)
+    data['b'] = data['b']*u.AU.to(u.Rsun)
 
 
     #####################
@@ -360,9 +360,8 @@ if n_part==3:
     data['b/a'] = data['b/a']*(data['a1'])
     data.rename(index=str, columns={'b/a':'b'}, inplace=True)
     # convert AU to R_sun
-    a_to_r = (1.5e8/6.975e5)
-    data['a1'] = data['a1']*a_to_r
-    data['b'] = data['b']*a_to_r
+    data['a1'] = data['a1']*u.AU.to(u.Rsun)
+    data['b'] = data['b']*u.AU.to(u.Rsun)
 
 
     #####################
