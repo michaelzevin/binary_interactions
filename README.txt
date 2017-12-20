@@ -50,8 +50,7 @@ SUBROUTINE Calc_binary_info(pos_1, vel_1, mass_1, pos_2, vel_2, mass_2, out_bina
 sed -i -r '1s/^.{N}//' file.dat
 
 # Change cluster files to proper format:
-sed -i.bak s/#//g *
-sed -i.bak '1s/^.//' *
+sed -i -r s/#//g *; sed -i -r '1s/^.{1}//' *
 
 
 
