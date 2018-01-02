@@ -3,14 +3,6 @@ from scipy import integrate
 from scipy.integrate import ode
 import numpy as np
 
-def au_to_period(a,m):
-    """
-    Returns the period (in days) for a binary
-    with mass m (solar masses) and sem-major axis a (AU)
-    """
-    g = 2.96e-4 # G in days,AU,solar masses
-    return np.sqrt(a**3 * 4*np.pi**2 / (g*m))
-
 def deda_peters(a,e):
 	num = 12*a*(1+(73./24)*e**2 + (37./96)*e**4)
 	denom = 19*e*(1-e**2)*(1+(121./304)*e**2)
@@ -96,15 +88,25 @@ def eccentricity_at_fLow(m1,m2,a_0,e_0,fLow=10):
 	a_low = a_at_fLow(m1,m2,fLow/2.)
 
 	return eccentricity_at_a(m1,m2,a_0,e_0,a_low)
+
 	
+def au_to_period(a,m):
+    """
+    Returns the period (in days) for a binary
+    with mass m (solar masses) and semi-major axis a (AU)
+    """
+    g = 2.96e-4 # G in days,AU,solar masses
+    return np.sqrt(a**3 * 4*np.pi**2 / (g*m))
 
 def eccentric_gwave_freq(a,m,e):
 	"""
 	returns the gravitational-wave frequency for a binary at seperation a (AU), mass
 	M (solar masses), and eccentricity e, using the formula from Wen 2003
 	"""
-	period = 1 / (86400*au_to_period(a,m))
-	return 2*period*pow(1+e,1.1954)/pow(1-e*e,1.5)
+
+
+	freq = 1 / (86400*au_to_period(a,m))
+	return 2*freq*pow(1+e,1.1954)/pow(1-e*e,1.5)
 
 def eccentricity_at_eccentric_fLow(m1,m2,a_0,e_0,fLow=10,retHigh = False):
 	"""
