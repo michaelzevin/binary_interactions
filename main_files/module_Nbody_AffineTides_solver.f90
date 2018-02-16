@@ -12,6 +12,7 @@ integer, dimension(:), allocatable					:: evoTides_yesno, RigidSph_yesno
 real*8, dimension(3,3)								:: I_MAT
 real*8												:: PN_gamma = 2.12370597232e-06	!postnewtonian gamma - units: Rsun, Msun, ....
 real*8                                              :: rsun_to_au = 0.004650467 !converts Rsun to AU, for writing output in AU
+real*8                                              :: vCM_to_kms = 437.892 !converts CoM velocity to km/s by multipliying by sqrt(GMsun/Rsun)
 integer												:: use_12PN, use_1PN, use_2PN, use_25PN, Identify_3Body_endstate, max_sim_nrsteps
 integer												:: outputinfo_screenfiles, downsample, stepc
 real*8												:: scale_dt, max_sim_time, evolvetides_threshold, ENDbinsingle_threshold
@@ -1402,7 +1403,7 @@ CONTAINS
 
             Return_Nbody_endstate(:) = [out_end_state_flag, out_bin_i, out_bin_j, out_bin_k, out_bin_l]
             Return_endstate_binparams(:) = [mass_bin_i, mass_bin_j, mass_bin_k, mass_bin_l, a_bin*rsun_to_au, e_bin, &
-                            a_bin_out*rsun_to_au, e_bin_out, inc_bin, vCM*rsun_to_au]
+                            a_bin_out*rsun_to_au, e_bin_out, inc_bin, vCM*vCM_to_kms]
         endif
         
     !------------------------------------------------------------
@@ -2693,8 +2694,7 @@ CONTAINS
 	if (IC_code_version .EQ. 1) then
 	!---------------------------------------
 	!write endstate info to file:
-	write(20,*) endsim_end_state_flag, Return_Nbody_endstate(2:5), Return_endstate_binparams(1:4), &
-                    Return_endstate_binparams(5:9)
+	write(20,*) endsim_end_state_flag, Return_Nbody_endstate(2:5), Return_endstate_binparams(1:10)
 !	write(20,*) endsim_Return_Info_arr_INT
 !	write(20,*) endsim_Return_Info_arr_REAL
 	!Print info to screen:
