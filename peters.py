@@ -163,3 +163,24 @@ def timescale_spinorbit_precession(a,e,M,chi_eff):
 	c = 0.0020039888 # C in au/sec
 
 	return c**3 * a**3 * (1 - e**2)**1.5 / (2*chi_eff*(G*M)**2)
+
+
+
+
+# Functions added by Mike
+def c0(a0,e0):
+    num = a0*(1-e0**2)
+    denom = e0**(12./19) * (1+(121./304)*e0**2)**(870./2299)
+    return num/denom
+
+def a(e, c0):
+    num = c0*e**(12./19) * (1 + (121./304)*e**2)**(870./2299)
+    denom = (1-e**2)
+    return num/denom
+
+def r_peri(e, c0):
+    num = c0*e**(12./19) * (1 + (121./304)*e**2)**(870./2299) * (1-e)
+    denom = (1-e**2)
+    return num/denom
+
+

@@ -55,7 +55,7 @@ def z_rot(v, theta):
     return np.dot(rot,v)
 
 # threshold functions
-tid_thresh = 10**-5
+tid_thresh = 10**-3
 def v_crit(m11,m12,m21,m22,a1,a2):
     mu_tot = mu(Mtot(m11,m12),Mtot(m21,m22))
     return np.sqrt((1./mu_tot)*((m11*m12/a1)+(m21*m22/a2)))
@@ -306,16 +306,24 @@ if n_part==4:
 
 
 
-    # Move binary 2 into CoM frame of binary 1
+    # move binary 2 into CoM frame of binary 1
     v_inf = binary['v/v_crit']*v_crit(m11,m12,m21,m22,a1,a2)
     # we now find the velocity and impact parameter at point where the binaries are separated by r_evolve
     # where r_evolve is the max distance between sys 1 and sys 2 where tidal threshold is reached
     r_start_1 = r_evolve(m11,m12,m21,m22,a1,e1)
     r_start_2 = r_evolve(m21,m22,m11,m12,a2,e2)
     r_start = max([r_start_1,r_start_2])
-
-    v_start = np.sqrt(v_inf**2 + 2*M1/r_start)   # conservation of energy
+    v_start = np.sqrt(v_inf**2 + 2*(M1+M2)/r_start)   # conservation of energy #NOTE: CHANGED TO (M1+M2)
     b_start = b*v_inf / v_start   # conservation of angular momentum
+
+    # if the tidal threshold distance is less than b_start, we start the binary at a horizontal offset of b_start
+    if r_start < b_start:
+        # we solve the system such that r_start = sqrt(2)*b_start, used positive root in Mathematica
+        r_start = (np.sqrt((M1+M2)**2 + 2*(b**2)*(v_inf**4))-(M1+M2))/(v_inf**2)
+        v_start = np.sqrt(v_inf**2 + 2*(M1+M2)/r_start)   # conservation of energy
+        b_start = b*v_inf / v_start   # conservation of angular momentum
+
+
     d_start = np.sqrt(r_start**2 - b_start**2)
     x_shift = np.asarray([d_start, 0, b_start]) # incorporate impact parameter along the z-axis
     v_shift = np.asarray([-v_start, 0, 0])

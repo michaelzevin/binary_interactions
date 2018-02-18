@@ -2694,7 +2694,7 @@ CONTAINS
 	if (IC_code_version .EQ. 1) then
 	!---------------------------------------
 	!write endstate info to file:
-	write(20,*) endsim_end_state_flag, Return_Nbody_endstate(2:5), Return_endstate_binparams(1:10)
+	write(20,*) endsim_end_state_flag, Return_Nbody_endstate(2:5), Return_endstate_binparams(:)
 !	write(20,*) endsim_Return_Info_arr_INT
 !	write(20,*) endsim_Return_Info_arr_REAL
 	!Print info to screen:
