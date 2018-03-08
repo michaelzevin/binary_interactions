@@ -164,7 +164,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
 argp = argparse.ArgumentParser()
 argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
-argp.add_argument("-pn", "--pn", type=str, help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
+argp.add_argument("-pn", "--pn", type=str, default='1225', help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
 argp.add_argument("-np", "--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=10000, help="Number of orbits to integrate for. Default=1e4.")

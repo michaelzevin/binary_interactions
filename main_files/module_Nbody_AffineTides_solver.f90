@@ -2462,7 +2462,8 @@ CONTAINS
         !Write to data files
         !-----------------------------------
 		if (IC_code_version .EQ. 1) then
-		if (outputinfo_screenfiles .EQ. 1)	CALL output_Nbody_sub(Y,TOUT)
+		!if (outputinfo_screenfiles .EQ. 1)	CALL output_Nbody_sub(Y,TOUT)
+		if (downsample .NE. 0) CALL output_Nbody_sub(Y,TOUT)
 		endif	!code version 1					
 
 
