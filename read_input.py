@@ -108,7 +108,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
             PN1, PN2, PN25 = 0, 0, 1
         elif PN=='1225':
             PN1, PN2, PN25 = 1, 1, 1
-        f = open('binary.txt', 'w')
+        f = open(args.binfile+'.txt', 'w')
         f.write('%i\n\
 %i %i %i %i %i %i\n\
 0.01 %.2f 3600.0 10.0\n\
@@ -134,7 +134,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
             PN1, PN2, PN25 = 0, 0, 1
         elif PN=='1225':
             PN1, PN2, PN25 = 1, 1, 1
-        f = open('binary.txt', 'w')
+        f = open(args.binfile+'.txt', 'w')
         f.write('%i\n\
 %i %i %i %i %i %i\n\
 0.01 %.2f 3600.0 10.0\n\
@@ -163,6 +163,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
 
 argp = argparse.ArgumentParser()
 argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
+argp.add_argument("-b", "--binfile", type=str, default='binary', help="Specify the name for the binary submit file. Default='binary'.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
 argp.add_argument("-pn", "--pn", type=str, default='1225', help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
 argp.add_argument("-np", "--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
@@ -345,8 +346,12 @@ if n_part==4:
     x22, v22 = x22-x_CoM, v22-v_CoM
 
 
-    # Calculate average orbital period for two binaries to use for integration time
-    T = (period(a1,M1)+period(a2,M2))/2.
+    # Calculate max orbital period of the two binaries to use for integration time
+    if a1>=a2:
+        T = period(a1,M1)
+    elif a1<a2:
+        T = period(a2,M2)
+    #T = (period(a1,M1)+period(a2,M2))/2.
 
     # Store binary info in dictionary
     binary_input={'n':n_part, 'tau':args.orbits*T, 'm11':m11, 'x11':x11, 'v11':v11, 'm12':m12, 'x12':x12, 'v12':v12, \
