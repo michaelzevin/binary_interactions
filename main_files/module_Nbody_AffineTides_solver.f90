@@ -988,7 +988,7 @@ CONTAINS
 
 
 		!------------------------------------------------------------
-        !CHECK FOR AN UNBOUND OBJECT IN BODY CASE!
+        !CHECK FOR AN UNBOUND OBJECT IN 3BODY CASE!
 		!Check for bound binary with 1 unbound object (endstate = 4)
 		!------------------------------------------------------------
 		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 3) THEN		!if endstate not found
@@ -1017,7 +1017,7 @@ CONTAINS
         v_dir_ij = DOT_PRODUCT((CM1-CM_pos), (vCM1-CM_vel))
         v_dir_k = DOT_PRODUCT((pos(k,:)-CM_pos), (vel(k,:)-CM_vel))
 
-        if (Etot_ijk .GT. 0.0 .AND. Etot_ij .LT. 0.0 .AND. v_dir_ij .GT. 0 .AND. v_dir_ij .GT. 0) then
+        if (Etot_ijk .GT. 0.0 .AND. Etot_ij .LT. 0.0 .AND. v_dir_ij .GT. 0 .AND. v_dir_k .GT. 0) then
             
                 ! see if binary [i,j] is bound below tidal threshold
                 r_ijk = len3vec(CM1-pos(k,:))
