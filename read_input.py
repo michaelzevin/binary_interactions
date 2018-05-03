@@ -104,6 +104,8 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
     if b['n']==3:
         if PN=='0':
             PN1, PN2, PN25 = 0, 0, 0
+        elif PN=='12':
+            PN1, PN2, PN25 = 1, 1, 0
         elif PN=='25':
             PN1, PN2, PN25 = 0, 0, 1
         elif PN=='1225':
@@ -130,6 +132,8 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
     elif b['n']==4:
         if PN=='0':
             PN1, PN2, PN25 = 0, 0, 0
+        elif PN=='12':
+            PN1, PN2, PN25 = 1, 1, 0
         elif PN=='25':
             PN1, PN2, PN25 = 0, 0, 1
         elif PN=='1225':
@@ -165,14 +169,14 @@ argp = argparse.ArgumentParser()
 argp.add_argument("-f", "--file", type=str, help="Specify the file path to the grid of data.")
 argp.add_argument("-b", "--binfile", type=str, default='binary', help="Specify the name for the binary submit file. Default='binary'.")
 argp.add_argument("-i", "--index", type=int, help="Index of the row in the data file that will be read.")
-argp.add_argument("-pn", "--pn", type=str, default='1225', help="Specify which PN orders to used. Default='1225'. Options: 0, 25, 1225.")
+argp.add_argument("-pn", "--pn", type=str, default='1225', help="Specify which PN orders to used. Default='1225'. Options: 0, 12, 25, 1225.")
 argp.add_argument("-np", "--n-particles", type=int, default=4, help="Number of particles in the simulation. Default=4.")
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=10000, help="Number of orbits to integrate for. Default=1e4.")
 argp.add_argument("--steps", type=int, default=10000000, help="Number of simulation steps to integrate for. Default=1e7.")
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")
-argp.add_argument("--screen-out", action="store_true", help="Boolean to determined whether info is printed to screen. ")
+argp.add_argument("--screen-out", action="store_true", help="Boolean to determined whether info is printed to screen. Default=False.")
 args = argp.parse_args()
 
 
@@ -351,7 +355,6 @@ if n_part==4:
         T = period(a1,M1)
     elif a1<a2:
         T = period(a2,M2)
-    #T = (period(a1,M1)+period(a2,M2))/2.
 
     # Store binary info in dictionary
     binary_input={'n':n_part, 'tau':args.orbits*T, 'm11':m11, 'x11':x11, 'v11':v11, 'm12':m12, 'x12':x12, 'v12':v12, \
@@ -457,7 +460,6 @@ if n_part==3:
     # particle is already in the center of mass of its system, obviously
     # no need to rotate by angle of periapse, inclination, and ascending node
 
-
     # Move binary 2 into CoM frame of binary 1
     v_inf = binary['v/v_crit']*v_crit_3body(m11,m12,m21,a1)
     # we now find the velocity and impact parameter at point where the binaries are separated by r_evolve
@@ -486,7 +488,7 @@ if n_part==3:
     x21, v21 = x21-x_CoM, v21-v_CoM
 
 
-    # Calculate average orbital period for two binaries to use for integration time
+    # Calculate orbital period for the binary to use for integration time
     T = (period(a1,M1))
 
     # Store binary info in dictionary
