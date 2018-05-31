@@ -889,7 +889,7 @@ CONTAINS
         a_bin_out           = 0.0
         e_bin_out           = 0.0
         inc_bin             = 0.0
-        delta_F             = 1e-3                      ! Ftid/Frel threshold
+        delta_F             = 1e-5                      ! Ftid/Frel threshold
         delta_EL            = 1e-3                      ! E,L threshold
 		!------------------------------------------------------------
 		!Check for tidal disruptions:
