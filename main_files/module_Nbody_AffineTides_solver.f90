@@ -855,7 +855,7 @@ CONTAINS
         real*8                                                  :: fi, fj, fk, fl
         real*8                                                  :: mass_bin_i, mass_bin_j, mass_bin_k, mass_bin_l
         real*8                                                  :: a_bin, e_bin, a_bin_out, e_bin_out, inc_bin
-        real*8                                                  :: a_in, e_in, a_out, e_out, inc
+        real*8                                                  :: a_in, e_in, a_out, e_out, inc, q_out
         real*8                                                  :: E_kin, E_pot, E_tot, E_check, L_check, L_ini, E_ini
         real*8, dimension(3)                                    :: L_check_vec, L_ini_vec
         real*8                                                  :: Etot_ij, Etot_ik, Etot_il, Etot_kl
@@ -1156,7 +1156,8 @@ CONTAINS
                     ! now, we see if a stable triple was formed...
                     ! Marding & Aarseth criteria:
                     term1 = a_out/a_in * (1d0-e_out)
-                    term2 = 2.8 * ((1d0 + M_in/mass(k))*((1+e_out)/SQRT(1-e_out))**(2d0/5d0) &
+                    q_out = mass(k)/M_in
+                    term2 = 2.8 * ((1d0 + q_out)*((1+e_out)/SQRT(1-e_out))**(2d0/5d0) &
                                 * (1d0 - (0.3/3.1415)*inc))
 
                     ! Threshold that Ftid/Frel < delta = 1e-5
@@ -1165,7 +1166,8 @@ CONTAINS
                     Ft = Fthresh(M_in, mass(k), mass(ub1), a_out, e_out, r_ij)
 
                     ! check if stable triple criteria is met, and write output variables
-                    if (term1 .GT. term2 .AND. Ft .LT. delta_F) then
+                    ! we also note that q_out must be less than or equal to 5
+                    if (term1 .GT. term2 .AND. q_out .LE. 5 .AND. Ft .LT. delta_F) then
                         end_state_flag = 3			!STABLE TRIPLE STATE STATE	
                         out_bin_i 			= i
                         out_bin_j 			= j
