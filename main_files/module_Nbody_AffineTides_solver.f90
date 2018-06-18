@@ -1848,6 +1848,24 @@ CONTAINS
 		!------------------------------------------------------------
 		!Write info to file:
 		!------------------------------------------------------------
+		!for 2 particle
+		if (n_particles .EQ. 2) then
+            !if downsample is 0, don't write any position/velocity data
+            !if downsample is 1, write every step
+            if (downsample .EQ. 1) then
+			    write(10,*) pos(1,:), pos(2,:)
+			    write(18,*) vel(1,:), vel(2,:)
+			    write(11,*) time_t
+            endif
+            !if downsample is an integer >1, only write the downsample'th step
+            if (downsample .GT. 1 .AND. stepc .GE. ds*downsample) then
+			    write(10,*) pos(1,:), pos(2,:)
+			    write(18,*) vel(1,:), vel(2,:)
+			    write(11,*) time_t
+                ds = ds + 1
+		    endif
+        endif
+
 		!for 3 particle
 		if (n_particles .EQ. 3) then
             !if downsample is 0, don't write any position/velocity data
