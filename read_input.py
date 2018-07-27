@@ -95,7 +95,7 @@ def mkdir_p(path):
             raise
 
 # main input file writing function
-def write_input(b,PN,steps,r_min,downsample,screen_out):
+def write_input(b,PN,steps,max_time,r_min,downsample,screen_out):
     if screen_out:
         screen = 1
     else:
@@ -113,7 +113,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
         f = open(args.binfile+'.txt', 'w')
         f.write('%i\n\
 %i %i %i %i %i %i\n\
-0.01 %.2f 3600.0 10.0\n\
+0.01 %.2f %.1f 10.0\n\
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
@@ -123,7 +123,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f'
-        % (b['n'], PN1,PN2,PN25,screen,steps,downsample, b['tau'],\
+        % (b['n'], PN1,PN2,PN25,screen,steps,downsample, b['tau'],max_time,\
         b['m11'],r_min*M_to_R(b['m11']),b['x11'][0],b['x11'][1],b['x11'][2],b['v11'][0],b['v11'][1],b['v11'][2],\
         b['m12'],r_min*M_to_R(b['m12']),b['x12'][0],b['x12'][1],b['x12'][2],b['v12'][0],b['v12'][1],b['v12'][2],\
         b['m21'],r_min*M_to_R(b['m21']),b['x21'][0],b['x21'][1],b['x21'][2],b['v21'][0],b['v21'][1],b['v21'][2]))
@@ -141,7 +141,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
         f = open(args.binfile+'.txt', 'w')
         f.write('%i\n\
 %i %i %i %i %i %i\n\
-0.01 %.2f 3600.0 10.0\n\
+0.01 %.2f %.1f 10.0\n\
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
@@ -154,7 +154,7 @@ def write_input(b,PN,steps,r_min,downsample,screen_out):
 %.6f  %.6f\n\
 %.6f  %.6f  %.6f\n\
 %.6f  %.6f  %.6f'\
-        % (b['n'], PN1,PN2,PN25,screen,steps,downsample, b['tau'],\
+        % (b['n'], PN1,PN2,PN25,screen,steps,downsample, b['tau'],max_time,\
         b['m11'],r_min*M_to_R(b['m11']),b['x11'][0],b['x11'][1],b['x11'][2],b['v11'][0],b['v11'][1],b['v11'][2],\
         b['m12'],r_min*M_to_R(b['m12']),b['x12'][0],b['x12'][1],b['x12'][2],b['v12'][0],b['v12'][1],b['v12'][2],\
         b['m21'],r_min*M_to_R(b['m21']),b['x21'][0],b['x21'][1],b['x21'][2],b['v21'][0],b['v21'][1],b['v21'][2],\
@@ -174,6 +174,7 @@ argp.add_argument("-np", "--n-particles", type=int, default=4, help="Number of p
 argp.add_argument("--fixed-b", action="store_true", help="Determine whether binaries are sampled in a circle of area b_max (False), or if b is taken to be the true impact parameter (True). Default=False.")
 argp.add_argument("--orbits", type=int, default=10000, help="Number of orbits to integrate for. Default=1e4.")
 argp.add_argument("--steps", type=int, default=10000000, help="Number of simulation steps to integrate for. Default=1e7.")
+argp.add_argument("--max-time", type=int, default=3600, help="Max computational integration time, in seconds. Default=3600.")
 argp.add_argument("--r-min", type=float, default=1.0, help="Effective radius of the black hole, in units of Schwarzschild radii. Default=1.0.")
 argp.add_argument("--downsample", type=int, default=0, help="Specify whether trajcetories should be saved, and how they should be downsampled. Default=0 (i.e., no output data is written). Options: 0 (none), 1 (all), n>1 (downsampled by every n steps in the simulation).")
 argp.add_argument("--screen-out", action="store_true", help="Boolean to determined whether info is printed to screen. Default=False.")
@@ -407,5 +408,5 @@ elif n_part==3:
             'm21':m21, 'x21':x21, 'v21':v21}
 
 # Write the data in the correct format
-write_input(binary_input, PN=args.pn, steps=args.steps, r_min=args.r_min, downsample=args.downsample, screen_out=args.screen_out)
+write_input(binary_input, PN=args.pn, steps=args.steps, max_time=args.max_time, r_min=args.r_min, downsample=args.downsample, screen_out=args.screen_out)
 
