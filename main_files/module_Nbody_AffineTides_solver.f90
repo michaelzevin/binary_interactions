@@ -991,15 +991,11 @@ CONTAINS
         !CHECK FOR AN UNBOUND OBJECT IN 3BODY CASE!
 		!Check for bound binary with 1 unbound object (endstate = 4)
 		!------------------------------------------------------------
-		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 3) THEN		!if endstate not found
 
-		!Initialize check flag params:
-        unbound = 0             ! counter for number of unbound objects
-
-        !See how many objects in the system are unbound
 		do i=1, n_particles,1
         do j=i+1, n_particles,1
         k = 6 - (i+j)
+		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 3) THEN		!if endstate not found
 
         CM_pos = CoM_3body(pos(i,:), mass(i), pos(j,:), mass(j), pos(k,:), mass(k))
         CM_vel = CoM_3body(vel(i,:), mass(i), vel(j,:), mass(j), vel(k,:), mass(k))
@@ -1033,10 +1029,10 @@ CONTAINS
 
         endif !force check
 
+        ENDIF !endstate
+
         enddo !loop over j
         enddo !loop over i
-
-        ENDIF !endstate
 
 
 
@@ -1121,6 +1117,7 @@ CONTAINS
         enddo   !loop over k
         enddo   !loop over j
         enddo   !loop over i
+        ENDIF   !endstate
 
 
         
@@ -1129,6 +1126,7 @@ CONTAINS
             do i=1, n_particles,1
             do j=i+1, n_particles,1
             do k=1, n_particles,1
+            IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if endstate not found
             if (i .NE. j .AND. i .NE. k .AND. j .NE. k .AND. &
                         i .NE. ub1 .AND. j .NE. ub1 .AND. k .NE. ub1) then
                 ! assume i,j makes up the inner binary, calculate binary info and angular momentum
@@ -1184,6 +1182,7 @@ CONTAINS
                 endif !if a_in < a_out
 
             endif
+            ENDIF!endstate
             enddo
             enddo
             enddo
@@ -1195,6 +1194,7 @@ CONTAINS
 
         ! 2 UNBOUND: see if the two remaining are bound
         if (unbound .EQ. 2 .AND. n_particles .EQ. 4) then
+        IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if endstate not found
 
             ! write info for the bound binary
             do j=1, n_particles, 1
@@ -1230,6 +1230,7 @@ CONTAINS
                 if (Ft1 .LT. delta_F .AND. Ft2 .LT. delta_F)        end_state_flag = 4  !>(N-2) systems are unbound
             endif
 
+        ENDIF!endstate
         endif ! if statement for two unbound objects
 
         
@@ -1237,6 +1238,7 @@ CONTAINS
 
         ! >2 UNBOUND: write info and set total ionization flag   # FIXME: flagged removed for now
         if (unbound .GT. 2 .AND. n_particles .EQ. 4) then
+        IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if endstate not found
             
             ! write info for the output file
             out_bin_i = ub1
@@ -1250,10 +1252,8 @@ CONTAINS
 
 !            end_state_flag = 7  !TOTAL IONIZATION
 
+        ENDIF!endstate
         endif ! if statement for total ionization
-
-
-        ENDIF
 
 
 
@@ -1262,10 +1262,10 @@ CONTAINS
 		!------------------------------------------------------------
 		!Check for 2 unbound binary systems moving away from each other (endstate=6)
 		!------------------------------------------------------------
-		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
 
         do i=1, n_particles,1
         do j=i+1, n_particles,1
+		IF (end_state_flag .EQ. 0 .AND. n_particles .EQ. 4) THEN		!if no end-state yet.
             CALL    Calc_binary_info(pos(i,:), vel(i,:), mass(i), pos(j,:), vel(j,:), mass(j), binary_info_arr_ij) ! system [i,j]
             Etot_ij = binary_info_arr_ij(3)
             ! see if PE is greater than KE
@@ -1329,11 +1329,11 @@ CONTAINS
                 enddo !loop over l
                 enddo !loop over k
             endif   !loop for particles being unique
+        ENDIF !endstate
         enddo !loop over j
         enddo !loop over i
                         
 
-        ENDIF !endstate
 
 
 
